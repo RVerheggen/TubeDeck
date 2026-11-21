@@ -341,16 +341,32 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .stat-card small { color: var(--muted); font-size: 10.5px; }
 .stat-card strong { font-size: 20px; margin-top: 3px; }
 
-.download-card {
-  display: flex; align-items: center; gap: 13px;
-  padding: 14px 0; border-bottom: 1px solid var(--border);
-}
+.download-card { padding: 14px 0; border-bottom: 1px solid var(--border); }
 .download-card:last-child { border-bottom: 0; }
+.download-row { display: flex; align-items: center; gap: 13px; }
 .file-icon {
-  width: 40px; height: 40px; flex: none;
-  display: grid; place-items: center;
+  width: 56px; height: 40px; flex: none;
+  display: grid; place-items: center; overflow: hidden;
   border-radius: 9px; background: var(--panel2); color: var(--accent);
 }
+.file-icon img { width: 100%; height: 100%; object-fit: cover; }
+.heading-right { display: inline-flex; align-items: center; gap: 8px; flex: none; }
+.stage { font-size: 10.5px; color: var(--muted); white-space: nowrap; }
+.download-meta .detail, .download-meta .error-text {
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.icon-button.active { border-color: var(--accent); color: var(--accent); }
+.icon-button.danger:hover:not(:disabled) { border-color: var(--red); color: var(--red); }
+.job-log {
+  margin: 12px 0 0 69px;
+  background: var(--code-bg); color: var(--code-text);
+  border-radius: 9px; padding: 10px 12px;
+  font-family: var(--mono); font-size: 10.5px; line-height: 1.6;
+  max-height: 220px; overflow: auto;
+}
+.notice.warn { color: var(--amber); background: var(--amber-soft); display: flex; gap: 10px; align-items: center; margin-bottom: 16px; }
+.link-button { border: 0; background: none; padding: 0; color: inherit; font: inherit; text-decoration: underline; cursor: pointer; }
+.small { font-size: 11px; }
 .download-info { flex: 1; min-width: 0; }
 .download-heading, .download-meta { display: flex; justify-content: space-between; gap: 12px; }
 .download-heading strong {

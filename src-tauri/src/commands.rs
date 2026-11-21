@@ -3,13 +3,17 @@
 use crate::{
     args::{self, BuiltCommand},
     binaries::{self, EngineStatus},
+    engine::{Engine, job::Job},
     jsonfile,
     options::DownloadOptions,
     presets::{self, Preset},
     settings::Settings,
 };
 use serde::Serialize;
-use std::{path::PathBuf, sync::Mutex};
+use std::{
+    path::PathBuf,
+    sync::{Arc, Mutex},
+};
 use tauri::State;
 
 pub const LOG_FILE_NAME: &str = "tubedeck";
@@ -79,14 +83,62 @@ pub fn get_settings(state: State<'_, AppState>) -> Settings {
 }
 
 #[tauri::command]
-pub fn save_settings(state: State<'_, AppState>, settings: Settings) -> CmdResult<Settings> {
+pub fn save_settings(
+    state: State<'_, AppState>,
+    engine: State<'_, Arc<Engine>>,
+    settings: Settings,
+) -> CmdResult<Settings> {
     let mut settings = settings.sanitized();
     if settings.download_folder.trim().is_empty() {
         settings.download_folder = state.default_download_folder.clone();
     }
     jsonfile::write(&state.settings_path(), &settings)?;
     *state.settings.lock().unwrap() = settings.clone();
+    // A higher concurrency limit may allow more queued jobs to start now.
+    engine.schedule();
     Ok(settings)
+}
+
+// ---- Download engine -------------------------------------------------------------------
+
+#[tauri::command]
+pub fn enqueue_jobs(
+    engine: State<'_, Arc<Engine>>,
+    urls: Vec<String>,
+    options: DownloadOptions,
+    preset_name: Option<String>,
+) -> CmdResult<Vec<Job>> {
+    engine.enqueue(urls, options, preset_name)
+}
+
+#[tauri::command]
+pub fn list_jobs(engine: State<'_, Arc<Engine>>) -> Vec<Job> {
+    engine.list()
+}
+
+#[tauri::command]
+pub fn cancel_job(engine: State<'_, Arc<Engine>>, id: String) -> CmdResult<()> {
+    engine.cancel(&id)
+}
+
+#[tauri::command]
+pub fn retry_job(engine: State<'_, Arc<Engine>>, id: String) -> CmdResult<()> {
+    engine.retry(&id)
+}
+
+#[tauri::command]
+pub fn remove_job(engine: State<'_, Arc<Engine>>, id: String) -> CmdResult<()> {
+    engine.remove(&[id])
+}
+
+#[tauri::command]
+pub fn clear_finished_jobs(engine: State<'_, Arc<Engine>>) -> CmdResult<()> {
+    engine.clear_finished()
+}
+
+#[tauri::command]
+pub fn get_job_log(engine: State<'_, Arc<Engine>>, id: String) -> Vec<String> {
+    engine.log(&id)
 }
 
 #[tauri::command]

@@ -1,0 +1,14 @@
+TD_INFO {"id": "jNQXAC9IVRw", "title": "Me at the zoo", "format_id": "395+140", "thumbnail": "https://i.ytimg.com/vi/jNQXAC9IVRw/hqdefault.jpg?sqp=-oaymwEmCOADEOgC8quKqQMa8AEB-AG-AoAC8AGKAgwIABABGFUgWShlMA8=&rs=AOn4CLA9eLBatYv9WbkD4BbZ2Im-biSPTw"}
+TD_PROG 395 {"status": "downloading", "downloaded_bytes": 1024, "total_bytes": 223779}
+TD_PROG 395 {"status": "finished", "downloaded_bytes": 223779, "total_bytes": 223779, "speed": 713353.6118222798}
+TD_PROG 140 {"status": "downloading", "downloaded_bytes": 1024, "total_bytes": 309288, "eta": 0}
+TD_PROG 140 {"status": "finished", "downloaded_bytes": 309288, "total_bytes": 309288, "speed": 4919986.405500837}
+TD_PP Merger|started
+TD_PP Merger|finished
+TD_PP Metadata|started
+TD_PP Metadata|finished
+TD_PP EmbedThumbnail|started
+TD_PP EmbedThumbnail|finished
+TD_PP MoveFiles|started
+TD_PP MoveFiles|finished
+TD_FILE C:\Users\me\Downloads\TubeDeck\Me at the zoo [jNQXAC9IVRw].mp4

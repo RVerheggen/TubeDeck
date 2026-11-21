@@ -24,14 +24,13 @@ export function AddUrlPanel() {
       const parsed = await api.parseUrls(draft);
       const valid = parsed.filter((p) => !p.error).map((p) => p.url);
       const invalid = parsed.filter((p) => p.error);
-      enqueue(valid);
+      if (valid.length) await enqueue(valid);
       if (invalid.length) {
         setDraft(invalid.map((p) => p.url).join("\n"));
         toast("error", `${invalid.length} invalid URL${invalid.length > 1 ? "s" : ""} kept in the box: ${invalid[0].error}`);
       } else {
         setDraft("");
       }
-      if (valid.length) toast("success", `Added ${valid.length} item${valid.length > 1 ? "s" : ""} to the queue`);
     } catch (e) {
       toast("error", errorMessage(e));
     } finally {

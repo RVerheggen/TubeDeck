@@ -1,4 +1,4 @@
-import { ListVideo, Trash2 } from "lucide-react";
+import { ListVideo, Trash2, TriangleAlert } from "lucide-react";
 import { AddUrlPanel } from "../components/AddUrlPanel";
 import { CommandPreview } from "../components/CommandPreview";
 import { DownloadCard } from "../components/DownloadCard";
@@ -10,9 +10,24 @@ export function DownloadsView() {
   const jobs = useAppStore((s) => s.jobs);
   const clearFinished = useAppStore((s) => s.clearFinished);
   const hasFinished = jobs.some((j) => ["completed", "failed", "canceled"].includes(j.status));
+  const engine = useAppStore((s) => s.engine);
+  const maxConcurrent = useAppStore((s) => s.settings!.maxConcurrent);
+  const setView = useAppStore((s) => s.setView);
 
   return (
     <>
+      {engine && !engine.ytdlp.ok && (
+        <div className="notice warn">
+          <TriangleAlert size={16} />
+          <span>
+            yt-dlp was not found, so downloads will fail. Install it or set its path in{" "}
+            <button className="link-button" onClick={() => setView("settings")}>
+              Settings → Engine
+            </button>
+            .
+          </span>
+        </div>
+      )}
       <AddUrlPanel />
       <StatsGrid />
       <div className="two-col">
@@ -20,9 +35,12 @@ export function DownloadsView() {
           title="Queue"
           icon={<ListVideo size={17} />}
           actions={
+            <>
+            <span className="muted small">Up to {maxConcurrent} at a time</span>
             <button className="secondary-button" onClick={clearFinished} disabled={!hasFinished}>
               <Trash2 size={15} /> Clear finished
             </button>
+            </>
           }
         >
           {jobs.length === 0 ? (
@@ -31,14 +49,7 @@ export function DownloadsView() {
               text="Paste a video or playlist URL above and press Add to queue (Ctrl+Enter)."
             />
           ) : (
-            <>
-              <div className="notice">
-                The download engine connects in the next milestone (M2). Until then, added items stay queued.
-              </div>
-              {jobs.map((j) => (
-                <DownloadCard key={j.id} job={j} />
-              ))}
-            </>
+            jobs.map((j) => <DownloadCard key={j.id} job={j} />)
           )}
         </Panel>
         <CommandPreview compact />

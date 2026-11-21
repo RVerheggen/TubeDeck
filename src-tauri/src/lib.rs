@@ -1,18 +1,21 @@
 mod args;
 mod binaries;
 mod commands;
+mod engine;
 mod jsonfile;
 mod options;
 mod presets;
 mod settings;
 
 use commands::{AppState, LOG_FILE_NAME};
+use engine::Engine;
+use std::sync::Arc;
 use tauri::Manager;
 use tauri_plugin_log::{RotationStrategy, Target, TargetKind};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let app = tauri::Builder::default()
         // Must be registered first: a second launch focuses the existing window instead.
         .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
             if let Some(w) = app.get_webview_window("main") {
@@ -38,7 +41,9 @@ pub fn run() {
             let paths = app.path();
             let config_dir = paths.app_config_dir()?;
             let log_dir = paths.app_log_dir()?;
-            let managed_bin_dir = paths.app_local_data_dir()?.join("bin");
+            let local_data = paths.app_local_data_dir()?;
+            let managed_bin_dir = local_data.join("bin");
+            let temp_root = local_data.join("tmp");
             let default_download_folder = paths
                 .download_dir()
                 .map(|d| d.join("TubeDeck").display().to_string())
@@ -46,6 +51,7 @@ pub fn run() {
 
             log::info!("TubeDeck {} starting; config in {}", app.package_info().version, config_dir.display());
             app.manage(AppState::load(config_dir, log_dir, managed_bin_dir, default_download_folder));
+            app.manage(Engine::new(app.handle().clone(), temp_root));
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -59,7 +65,23 @@ pub fn run() {
             commands::engine_status,
             commands::read_app_log,
             commands::app_paths,
+            commands::enqueue_jobs,
+            commands::list_jobs,
+            commands::cancel_job,
+            commands::retry_job,
+            commands::remove_job,
+            commands::clear_finished_jobs,
+            commands::get_job_log,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running TubeDeck");
+        .build(tauri::generate_context!())
+        .expect("error while building TubeDeck");
+
+    app.run(|handle, event| {
+        if let tauri::RunEvent::Exit = event {
+            // Job Objects also kill children when TubeDeck exits; this just does it promptly.
+            if let Some(engine) = handle.try_state::<Arc<Engine>>() {
+                engine.shutdown();
+            }
+        }
+    });
 }

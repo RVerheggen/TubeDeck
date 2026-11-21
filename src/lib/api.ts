@@ -8,11 +8,12 @@ import type {
   BuiltCommand,
   DownloadOptions,
   EngineStatus,
+  Job,
   ParsedUrl,
   Preset,
   Settings,
 } from "./types";
-import { mock } from "./mock";
+import { mock, mockSubscribe } from "./mock";
 
 export const inDesktop = isTauri();
 
@@ -33,7 +34,30 @@ export const api = {
   engineStatus: () => call<EngineStatus>("engine_status"),
   readAppLog: (maxLines = 500) => call<AppLog>("read_app_log", { maxLines }),
   appPaths: () => call<AppPaths>("app_paths"),
+
+  enqueueJobs: (urls: string[], options: DownloadOptions, presetName: string | null) =>
+    call<Job[]>("enqueue_jobs", { urls, options, presetName }),
+  listJobs: () => call<Job[]>("list_jobs"),
+  cancelJob: (id: string) => call<void>("cancel_job", { id }),
+  retryJob: (id: string) => call<void>("retry_job", { id }),
+  removeJob: (id: string) => call<void>("remove_job", { id }),
+  clearFinishedJobs: () => call<void>("clear_finished_jobs"),
+  getJobLog: (id: string) => call<string[]>("get_job_log", { id }),
 };
+
+/** Subscribe to engine events. Returns an unsubscribe function. */
+export async function onJobEvents(handlers: {
+  updated: (jobs: Job[]) => void;
+  removed: (ids: string[]) => void;
+}): Promise<() => void> {
+  if (!inDesktop) return mockSubscribe(handlers);
+  const { listen } = await import("@tauri-apps/api/event");
+  const offs = await Promise.all([
+    listen<Job[]>("jobs://updated", (e) => handlers.updated(e.payload)),
+    listen<string[]>("jobs://removed", (e) => handlers.removed(e.payload)),
+  ]);
+  return () => offs.forEach((off) => off());
+}
 
 export async function copyText(text: string): Promise<void> {
   if (inDesktop) {

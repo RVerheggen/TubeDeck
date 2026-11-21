@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { api, errorMessage } from "../lib/api";
+import { api, errorMessage, onJobEvents } from "../lib/api";
 import type {
   DownloadOptions,
   EngineStatus,
@@ -37,9 +37,13 @@ interface AppState {
   updatePreset: (preset: Preset) => Promise<void>;
   deletePreset: (id: string) => Promise<void>;
   refreshEngine: () => Promise<void>;
-  enqueue: (urls: string[]) => void;
-  removeJob: (id: string) => void;
-  clearFinished: () => void;
+  enqueue: (urls: string[]) => Promise<void>;
+  applyJobUpdates: (jobs: Job[]) => void;
+  applyJobRemovals: (ids: string[]) => void;
+  cancelJob: (id: string) => Promise<void>;
+  retryJob: (id: string) => Promise<void>;
+  removeJob: (id: string) => Promise<void>;
+  clearFinished: () => Promise<void>;
   toast: (kind: Toast["kind"], message: string) => void;
   dismissToast: (id: number) => void;
 }
@@ -52,7 +56,7 @@ export function sameOptions(a: DownloadOptions, b: DownloadOptions): boolean {
   return (Object.keys(a) as (keyof DownloadOptions)[]).every((k) => a[k] === b[k]);
 }
 
-const FINISHED = new Set(["completed", "failed", "canceled"]);
+let initStarted = false;
 
 export const useAppStore = create<AppState>((set, get) => {
   /** Persist settings after a short pause so typing doesn't write on every keystroke. */
@@ -69,6 +73,15 @@ export const useAppStore = create<AppState>((set, get) => {
     }, SAVE_DELAY_MS);
   };
 
+  /** Run a job command; the engine reports the resulting state through events. */
+  const jobAction = async (fn: () => Promise<void>) => {
+    try {
+      await fn();
+    } catch (e) {
+      get().toast("error", errorMessage(e));
+    }
+  };
+
   return {
     ready: false,
     loadError: null,
@@ -82,9 +95,17 @@ export const useAppStore = create<AppState>((set, get) => {
     toasts: [],
 
     init: async () => {
+      // React StrictMode runs effects twice in development; subscribe only once.
+      if (initStarted) return;
+      initStarted = true;
       try {
-        const [settings, presets] = await Promise.all([api.getSettings(), api.listPresets()]);
-        set({ settings, presets, ready: true });
+        // Subscribe before listing so no update between the two is missed.
+        await onJobEvents({
+          updated: (jobs) => get().applyJobUpdates(jobs),
+          removed: (ids) => get().applyJobRemovals(ids),
+        });
+        const [settings, presets, jobs] = await Promise.all([api.getSettings(), api.listPresets(), api.listJobs()]);
+        set({ settings, presets, jobs, ready: true });
         void get().refreshEngine();
       } catch (e) {
         set({ loadError: errorMessage(e), ready: true });
@@ -167,28 +188,36 @@ export const useAppStore = create<AppState>((set, get) => {
       }
     },
 
-    enqueue: (urls) => {
+    enqueue: async (urls) => {
       const s = get().settings;
       if (!s || urls.length === 0) return;
       const presetName = get().presets.find((p) => p.id === s.activePresetId)?.name ?? null;
-      const now = Date.now();
-      const jobs: Job[] = urls.map((url, i) => ({
-        id: `${now.toString(36)}-${i}-${Math.random().toString(36).slice(2, 7)}`,
-        url,
-        title: null,
-        status: "queued",
-        progress: { percent: null, downloadedBytes: null, totalBytes: null, speed: null, eta: null },
-        options: { ...s.currentOptions },
-        presetName,
-        createdAt: now,
-        finishedAt: null,
-        error: null,
-      }));
-      set({ jobs: [...get().jobs, ...jobs] });
+      try {
+        const created = await api.enqueueJobs(urls, s.currentOptions, presetName);
+        get().applyJobUpdates(created);
+        get().toast("success", `Added ${created.length} item${created.length > 1 ? "s" : ""} to the queue`);
+      } catch (e) {
+        get().toast("error", errorMessage(e));
+      }
     },
 
-    removeJob: (id) => set({ jobs: get().jobs.filter((j) => j.id !== id) }),
-    clearFinished: () => set({ jobs: get().jobs.filter((j) => !FINISHED.has(j.status)) }),
+    applyJobUpdates: (updated) => {
+      if (updated.length === 0) return;
+      const byId = new Map(updated.map((j) => [j.id, j]));
+      const jobs = get().jobs.map((j) => byId.get(j.id) ?? j);
+      const known = new Set(jobs.map((j) => j.id));
+      set({ jobs: [...jobs, ...updated.filter((j) => !known.has(j.id))] });
+    },
+
+    applyJobRemovals: (ids) => {
+      const gone = new Set(ids);
+      set({ jobs: get().jobs.filter((j) => !gone.has(j.id)) });
+    },
+
+    cancelJob: (id) => jobAction(() => api.cancelJob(id)),
+    retryJob: (id) => jobAction(() => api.retryJob(id)),
+    removeJob: (id) => jobAction(() => api.removeJob(id)),
+    clearFinished: () => jobAction(() => api.clearFinishedJobs()),
 
     toast: (kind, message) => {
       const id = ++toastSeq;

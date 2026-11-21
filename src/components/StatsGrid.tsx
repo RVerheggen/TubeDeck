@@ -5,7 +5,7 @@ import { useAppStore } from "../store/useAppStore";
 export function StatsGrid() {
   const jobs = useAppStore((s) => s.jobs);
   const active = jobs.filter((j) => ["starting", "downloading", "processing"].includes(j.status));
-  const queued = jobs.filter((j) => j.status === "queued" || j.status === "paused").length;
+  const queued = jobs.filter((j) => j.status === "queued").length;
   const done = jobs.filter((j) => j.status === "completed").length;
   const speed = active.reduce((sum, j) => sum + (j.progress.speed ?? 0), 0);
 

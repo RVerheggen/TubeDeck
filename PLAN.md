@@ -286,8 +286,10 @@ Optional: generate TS types from Rust (`ts-rs` or `tauri-specta`) so `lib/types.
 
 1. ✅ **M0. Scaffold.** git, create-tauri-app, plugins, fonts, CSP, empty views.
 2. ✅ **M1. UI shell.** All components and views, theme, option model, built-in presets, Rust `args.rs` + live command preview.
-3. **M2. Minimal engine.** Streaming runner + progress parser + batched events → real cards (B3). Includes `CREATE_NO_WINDOW` and the Job Object from the first real download, so there are no console windows and no orphaned ffmpeg. *This is where v1 becomes useful.*
-4. **M3. Manager.** Actor scheduler, dynamic concurrency, pause/resume/cancel (B1, B2, B5 part 1).
+3. ✅ **M2. Minimal engine.** Streaming runner + progress parser + batched events → real cards (B3). Includes `CREATE_NO_WINDOW` and the Job Object from the first real download, so there are no console windows and no orphaned ffmpeg. *This is where v1 becomes useful.*
+   Delivered earlier than planned: cancel (kills the process tree), retry, a per-job temp dir, a per-job log viewer, and concurrency limits that apply live. The queue uses a `Mutex` plus a schedule-on-change design rather than an actor; it is simple and has worked well so far.
+   Found during E2E testing: yt-dlp writes `postprocess` progress lines to **stderr**, so the runner merges both streams through one parser.
+4. **M3. Manager.** Pause/resume (kill and restart, keeping partial files), auto-retry with backoff for transient errors (e.g. YouTube HTTP 403), reordering (B2, B5 part 1).
 5. **M4. Persistence.** SQLite, history, per-job logs, startup recovery, graceful shutdown (B4).
 6. **M5. Playlists.** Probe + picker + grouped jobs (B5 part 2).
 7. **M6. Binaries.** First-run setup, managed downloads, yt-dlp updates, error classification (B6, B8).

@@ -106,14 +106,13 @@ export interface AppPaths {
   defaultDownloadFolder: string;
 }
 
-// ---- Queue (frontend-only in M1; owned by the Rust engine from M2) -----------------
+// ---- Queue (owned by the Rust engine, src-tauri/src/engine) ------------------------
 
 export type JobStatus =
   | "queued"
   | "starting"
   | "downloading"
   | "processing"
-  | "paused"
   | "completed"
   | "failed"
   | "canceled";
@@ -130,11 +129,16 @@ export interface Job {
   id: string;
   url: string;
   title: string | null;
+  thumbnail: string | null;
   status: JobStatus;
+  /** Sub-state such as "Stream 1/2" or "Merging formats". */
+  stage: string | null;
   progress: JobProgress;
   options: DownloadOptions;
   presetName: string | null;
+  outputPath: string | null;
   createdAt: number;
+  startedAt: number | null;
   finishedAt: number | null;
   error: string | null;
 }
