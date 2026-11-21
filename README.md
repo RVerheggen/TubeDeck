@@ -2,11 +2,14 @@
 
 A Windows desktop download manager for [yt-dlp](https://github.com/yt-dlp/yt-dlp), built with React + TypeScript, Tauri 2 and Rust.
 
-> **Status: milestones M0–M2 done.** Real downloads work, with live progress, cancel and retry. The queue and history are not saved between sessions yet (M4). See [PLAN.md](PLAN.md) for the roadmap.
+> **Status: milestones M0–M3 done.** Real downloads work, with live progress, pause/resume, cancel, automatic retry and reordering. The queue and history are not saved between sessions yet (M4). See [PLAN.md](PLAN.md) for the roadmap.
 
 ## Features (current)
 
 - **Download engine** (Rust): runs yt-dlp with no console window and parallel downloads up to your limit (changes apply immediately). Shows live percent, speed, ETA, stream (video/audio) and post-processing stage. Cancel stops the whole process tree (yt-dlp, its Python child and ffmpeg) and deletes the job's temp files. Failed jobs can be retried, and each job keeps a log of yt-dlp's output.
+- **Pause / resume**: pausing stops yt-dlp but keeps the partial files; resuming continues where it stopped. Pause all / Resume all apply to the whole queue.
+- **Automatic retry**: temporary failures (network errors, HTTP 403/429/5xx) are retried after 5s, 20s, 60s… (0–5 attempts, set in Settings). Permanent errors (private or removed video, unsupported URL, …) fail right away with a short explanation of what to do.
+- **Reordering**: drag queued or paused downloads to change which one starts next.
 - **Downloads view**: paste one or more URLs (Ctrl+Enter to add), cards with thumbnails, stats, and a live command preview.
 - **Configure view**: video or audio mode, quality cap, container, preferred codec, audio format and quality, subtitles, SponsorBlock, embedding toggles, output folder and filename template, fragments, retries, rate limit, browser cookies, and free-form custom arguments.
 - **Live command preview**: built by the same Rust function the engine will run (`src-tauri/src/args.rs`), shown as a copy-pasteable PowerShell command, with warnings for incompatible or dangerous options (e.g. `--exec`).
@@ -80,7 +83,9 @@ src-tauri/src/
   binaries.rs            locate yt-dlp / FFmpeg / Deno, read versions
   commands.rs            Tauri commands
   engine/
-    mod.rs               queue, scheduler, cancel/retry, batched `jobs://updated` events
+    mod.rs               queue, scheduler, pause/resume/cancel/retry, reorder, batched events
+    errors.rs            classify yt-dlp failures, hints, auto-retry backoff
+    job.rs               Job model and queue ordering
     runner.rs            spawn yt-dlp, merge stdout/stderr, apply parsed lines
     progress.rs          parse TubeDeck's progress templates (+ real-output fixture test)
     winjob.rs            Windows Job Object (kill the whole process tree)

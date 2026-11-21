@@ -34,8 +34,14 @@ pub struct ProgLine {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Line {
     Info(InfoLine),
-    Progress { format_id: String, data: ProgLine },
-    PostProcess { name: String, status: String },
+    Progress {
+        format_id: String,
+        data: ProgLine,
+    },
+    PostProcess {
+        name: String,
+        status: String,
+    },
     File(String),
     /// Anything else: goes to the job log.
     Other(String),
@@ -52,12 +58,18 @@ pub fn parse_line(raw: &str) -> Line {
         && let Some((fmt, json)) = rest.split_once(' ')
         && let Ok(data) = serde_json::from_str::<ProgLine>(json)
     {
-        return Line::Progress { format_id: fmt.to_string(), data };
+        return Line::Progress {
+            format_id: fmt.to_string(),
+            data,
+        };
     }
     if let Some(rest) = line.strip_prefix(PP_PREFIX)
         && let Some((name, status)) = rest.split_once('|')
     {
-        return Line::PostProcess { name: name.trim().to_string(), status: status.trim().to_string() };
+        return Line::PostProcess {
+            name: name.trim().to_string(),
+            status: status.trim().to_string(),
+        };
     }
     if let Some(rest) = line.strip_prefix(FILE_PREFIX).map(str::trim)
         && !rest.is_empty()
@@ -77,11 +89,20 @@ pub fn postprocessor_label(name: &str) -> String {
         "FFmpegMetadata" | "Metadata" => "Writing metadata".into(),
         "FFmpegEmbedSubtitle" | "EmbedSubtitle" => "Embedding subtitles".into(),
         "SponsorBlock" | "ModifyChapters" | "FFmpegSplitChapters" => "Applying chapters".into(),
-        "FFmpegVideoConvertor" | "FFmpegVideoRemuxer" | "VideoConvertor" | "VideoRemuxer" => "Converting".into(),
+        "FFmpegVideoConvertor" | "FFmpegVideoRemuxer" | "VideoConvertor" | "VideoRemuxer" => {
+            "Converting".into()
+        }
         "FFmpegThumbnailsConvertor" | "ThumbnailsConvertor" => "Converting thumbnail".into(),
         "MoveFiles" | "MoveFilesAfterDownload" => "Moving file".into(),
-        "FixupM3u8" | "FFmpegFixupM3u8" | "FixupM4a" | "FFmpegFixupM4a" | "FixupStretched"
-        | "FFmpegFixupStretched" | "FixupDuration" | "FFmpegFixupDuration" | "FixupTimestamp"
+        "FixupM3u8"
+        | "FFmpegFixupM3u8"
+        | "FixupM4a"
+        | "FFmpegFixupM4a"
+        | "FixupStretched"
+        | "FFmpegFixupStretched"
+        | "FixupDuration"
+        | "FFmpegFixupDuration"
+        | "FixupTimestamp"
         | "FFmpegFixupTimestamp" => "Fixing container".into(),
         other => format!("Post-processing ({other})"),
     }
@@ -127,20 +148,25 @@ impl Tracker {
             }
         }
 
-        let total = p.total_bytes.or(p.total_bytes_estimate).filter(|t| *t > 0.0);
+        let total = p
+            .total_bytes
+            .or(p.total_bytes_estimate)
+            .filter(|t| *t > 0.0);
         let finished = p.status.as_deref() == Some("finished");
         let fraction = if finished {
             Some(1.0)
         } else if let (Some(d), Some(t)) = (p.downloaded_bytes, total) {
             Some((d / t).clamp(0.0, 1.0))
-        } else if let (Some(i), Some(n)) = (p.fragment_index, p.fragment_count.filter(|n| *n > 0.0)) {
+        } else if let (Some(i), Some(n)) = (p.fragment_index, p.fragment_count.filter(|n| *n > 0.0))
+        {
             Some((i / n).clamp(0.0, 1.0))
         } else {
             None
         };
 
         let streams = self.streams.max(1) as f64;
-        let percent = fraction.map(|f| ((self.stream_index as f64 + f) / streams * 100.0).min(100.0));
+        let percent =
+            fraction.map(|f| ((self.stream_index as f64 + f) / streams * 100.0).min(100.0));
 
         let progress = Progress {
             percent,
@@ -170,7 +196,13 @@ pub fn error_message(stderr_tail: &[String]) -> Option<String> {
         .iter()
         .rev()
         .find_map(|l| l.strip_prefix("ERROR: ").map(str::to_string))
-        .or_else(|| stderr_tail.iter().rev().find(|l| !l.trim().is_empty()).cloned())
+        .or_else(|| {
+            stderr_tail
+                .iter()
+                .rev()
+                .find(|l| !l.trim().is_empty())
+                .cloned()
+        })
 }
 
 #[cfg(test)]
@@ -180,7 +212,9 @@ mod tests {
 
     #[test]
     fn parses_all_line_kinds() {
-        let info = parse_line(r#"TD_INFO {"id": "jNQXAC9IVRw", "title": "Me at the zoo", "format_id": "137+140", "thumbnail": "https://i.ytimg.com/x.jpg"}"#);
+        let info = parse_line(
+            r#"TD_INFO {"id": "jNQXAC9IVRw", "title": "Me at the zoo", "format_id": "137+140", "thumbnail": "https://i.ytimg.com/x.jpg"}"#,
+        );
         match info {
             Line::Info(i) => {
                 assert_eq!(i.title.as_deref(), Some("Me at the zoo"));
@@ -189,7 +223,9 @@ mod tests {
             other => panic!("unexpected {other:?}"),
         }
 
-        let prog = parse_line(r#"TD_PROG 137 {"status": "downloading", "downloaded_bytes": 1024, "total_bytes": 4096, "speed": 512.5, "eta": 6}"#);
+        let prog = parse_line(
+            r#"TD_PROG 137 {"status": "downloading", "downloaded_bytes": 1024, "total_bytes": 4096, "speed": 512.5, "eta": 6}"#,
+        );
         assert_eq!(
             prog,
             Line::Progress {
@@ -207,22 +243,32 @@ mod tests {
 
         assert_eq!(
             parse_line("TD_PP Merger|started\r\n"),
-            Line::PostProcess { name: "Merger".into(), status: "started".into() }
+            Line::PostProcess {
+                name: "Merger".into(),
+                status: "started".into()
+            }
         );
         assert_eq!(
             parse_line(r"TD_FILE C:\Users\me\Downloads\Me at the zoo [jNQXAC9IVRw].mp4"),
             Line::File(r"C:\Users\me\Downloads\Me at the zoo [jNQXAC9IVRw].mp4".into())
         );
         assert_eq!(parse_line("TD_FILE NA"), Line::Other("TD_FILE NA".into()));
-        assert_eq!(parse_line("[youtube] Extracting URL"), Line::Other("[youtube] Extracting URL".into()));
+        assert_eq!(
+            parse_line("[youtube] Extracting URL"),
+            Line::Other("[youtube] Extracting URL".into())
+        );
         // Malformed JSON falls back to a log line instead of being lost.
         assert!(matches!(parse_line("TD_PROG 137 {broken"), Line::Other(_)));
     }
 
     #[test]
     fn null_fields_are_tolerated() {
-        let l = parse_line(r#"TD_PROG NA {"status": "downloading", "downloaded_bytes": 10, "total_bytes": null, "speed": null, "eta": null, "fragment_index": 3, "fragment_count": 12}"#);
-        let Line::Progress { data, .. } = l else { panic!() };
+        let l = parse_line(
+            r#"TD_PROG NA {"status": "downloading", "downloaded_bytes": 10, "total_bytes": null, "speed": null, "eta": null, "fragment_index": 3, "fragment_count": 12}"#,
+        );
+        let Line::Progress { data, .. } = l else {
+            panic!()
+        };
         let mut t = Tracker::default();
         t.on_info(&InfoLine::default());
         let (p, stage) = t.on_progress("NA", &data);
@@ -235,14 +281,24 @@ mod tests {
     #[test]
     fn two_streams_combine_into_overall_percent() {
         let mut t = Tracker::default();
-        t.on_info(&InfoLine { format_id: Some("137+140".into()), ..Default::default() });
+        t.on_info(&InfoLine {
+            format_id: Some("137+140".into()),
+            ..Default::default()
+        });
 
-        let half = ProgLine { downloaded_bytes: Some(50.0), total_bytes: Some(100.0), ..Default::default() };
+        let half = ProgLine {
+            downloaded_bytes: Some(50.0),
+            total_bytes: Some(100.0),
+            ..Default::default()
+        };
         let (p, stage) = t.on_progress("137", &half);
         assert_eq!(p.percent, Some(25.0));
         assert_eq!(stage.as_deref(), Some("Stream 1/2"));
 
-        let done = ProgLine { status: Some("finished".into()), ..Default::default() };
+        let done = ProgLine {
+            status: Some("finished".into()),
+            ..Default::default()
+        };
         assert_eq!(t.on_progress("137", &done).0.percent, Some(50.0));
 
         let (p, stage) = t.on_progress("140", &half);
@@ -256,8 +312,17 @@ mod tests {
     #[test]
     fn playlist_stage_and_reset_per_item() {
         let mut t = Tracker::default();
-        t.on_info(&InfoLine { format_id: Some("22".into()), playlist_index: Some(3), n_entries: Some(10), ..Default::default() });
-        let p = ProgLine { total_bytes_estimate: Some(200.0), downloaded_bytes: Some(50.0), ..Default::default() };
+        t.on_info(&InfoLine {
+            format_id: Some("22".into()),
+            playlist_index: Some(3),
+            n_entries: Some(10),
+            ..Default::default()
+        });
+        let p = ProgLine {
+            total_bytes_estimate: Some(200.0),
+            downloaded_bytes: Some(50.0),
+            ..Default::default()
+        };
         let (prog, stage) = t.on_progress("22", &p);
         assert_eq!(prog.percent, Some(25.0));
         assert_eq!(prog.total_bytes, Some(200));
@@ -271,8 +336,14 @@ mod tests {
             "ERROR: [youtube] abc: Video unavailable".to_string(),
             "".to_string(),
         ];
-        assert_eq!(error_message(&lines).as_deref(), Some("[youtube] abc: Video unavailable"));
-        assert_eq!(error_message(&["boom".to_string()]).as_deref(), Some("boom"));
+        assert_eq!(
+            error_message(&lines).as_deref(),
+            Some("[youtube] abc: Video unavailable")
+        );
+        assert_eq!(
+            error_message(&["boom".to_string()]).as_deref(),
+            Some("boom")
+        );
         assert_eq!(error_message(&[]), None);
     }
 
@@ -299,7 +370,9 @@ mod tests {
                     last_percent = p.percent;
                     stages.push(stage.unwrap());
                 }
-                Line::PostProcess { name, status } if status == "started" => stages.push(postprocessor_label(&name)),
+                Line::PostProcess { name, status } if status == "started" => {
+                    stages.push(postprocessor_label(&name))
+                }
                 Line::PostProcess { .. } => {}
                 Line::File(f) => file = Some(f),
                 Line::Other(o) => panic!("unparsed fixture line: {o}"),
@@ -309,8 +382,14 @@ mod tests {
         assert_eq!(
             stages,
             vec![
-                "Stream 1/2", "Stream 1/2", "Stream 2/2", "Stream 2/2",
-                "Merging formats", "Writing metadata", "Embedding thumbnail", "Moving file",
+                "Stream 1/2",
+                "Stream 1/2",
+                "Stream 2/2",
+                "Stream 2/2",
+                "Merging formats",
+                "Writing metadata",
+                "Embedding thumbnail",
+                "Moving file",
             ]
         );
         assert!(file.unwrap().ends_with("Me at the zoo [jNQXAC9IVRw].mp4"));

@@ -41,6 +41,7 @@ export interface Settings {
   theme: Theme;
   downloadFolder: string;
   maxConcurrent: number;
+  autoRetry: number;
   ytdlpPath: string;
   ffmpegPath: string;
   denoPath: string;
@@ -113,6 +114,7 @@ export type JobStatus =
   | "starting"
   | "downloading"
   | "processing"
+  | "paused"
   | "completed"
   | "failed"
   | "canceled";
@@ -141,6 +143,28 @@ export interface Job {
   startedAt: number | null;
   finishedAt: number | null;
   error: string | null;
+  errorKind: ErrorKind | null;
+  errorHint: string | null;
+  /** Automatic retries made so far. */
+  attempts: number;
+  /** Epoch ms when a queued job will be retried automatically. */
+  retryAt: number | null;
 }
+
+export type ErrorKind =
+  | "network"
+  | "http403"
+  | "rate_limited"
+  | "server_error"
+  | "not_found"
+  | "bot_check"
+  | "age_restricted"
+  | "unavailable"
+  | "geo_blocked"
+  | "unsupported"
+  | "ffmpeg_missing"
+  | "js_runtime"
+  | "disk_full"
+  | "unknown";
 
 export type ViewId = "downloads" | "configure" | "presets" | "history" | "logs" | "settings";

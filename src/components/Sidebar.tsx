@@ -14,7 +14,7 @@ import { useAppStore } from "../store/useAppStore";
 import type { Theme, ViewId } from "../lib/types";
 import { EngineStatus } from "./EngineStatus";
 
-const ACTIVE = new Set(["queued", "starting", "downloading", "processing"]);
+const ACTIVE = new Set(["queued", "starting", "downloading", "processing", "paused"]);
 const FINISHED = new Set(["completed", "failed", "canceled"]);
 const NEXT_THEME: Record<Theme, Theme> = { system: "dark", dark: "light", light: "system" };
 

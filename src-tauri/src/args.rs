@@ -26,7 +26,10 @@ pub struct Warning {
 
 impl Warning {
     fn new(level: Level, message: impl Into<String>) -> Self {
-        Self { level, message: message.into() }
+        Self {
+            level,
+            message: message.into(),
+        }
     }
 }
 
@@ -74,7 +77,12 @@ pub fn build(url: &str, opts: &DownloadOptions, default_folder: &str) -> BuiltCo
     args.push(url_arg);
 
     let display = powershell_display(PROGRAM, &args);
-    BuiltCommand { program: PROGRAM.into(), args, display, warnings }
+    BuiltCommand {
+        program: PROGRAM.into(),
+        args,
+        display,
+        warnings,
+    }
 }
 
 /// Arguments derived from the user's options, without the trailing `-- <url>`.
@@ -108,7 +116,11 @@ pub fn user_args(
             if !sort.is_empty() {
                 push(&mut a, "-S", Some(&sort.join(",")));
             }
-            push(&mut a, "--merge-output-format", Some(opts.container.as_str()));
+            push(
+                &mut a,
+                "--merge-output-format",
+                Some(opts.container.as_str()),
+            );
 
             if opts.container == Container::Webm && opts.video_codec == VideoCodec::H264 {
                 warnings.push(Warning::new(
@@ -123,7 +135,10 @@ pub fn user_args(
             if opts.audio_format != AudioFormat::Best {
                 push(&mut a, "--audio-format", Some(opts.audio_format.as_str()));
             }
-            if matches!(opts.audio_format, AudioFormat::Mp3 | AudioFormat::M4a | AudioFormat::Opus) {
+            if matches!(
+                opts.audio_format,
+                AudioFormat::Mp3 | AudioFormat::M4a | AudioFormat::Opus
+            ) {
                 let q = opts.audio_quality.min(10);
                 push(&mut a, "--audio-quality", Some(&q.to_string()));
             }
@@ -156,7 +171,9 @@ pub fn user_args(
     if opts.subtitles != Subtitles::None {
         let langs = opts.sub_langs.trim();
         let langs_ok = !langs.is_empty()
-            && langs.chars().all(|c| c.is_ascii_alphanumeric() || ".*,-_".contains(c));
+            && langs
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || ".*,-_".contains(c));
         let langs = if langs_ok {
             langs
         } else {
@@ -200,7 +217,11 @@ pub fn user_args(
     // --- Network ----------------------------------------------------------------------
     let fragments = opts.fragments.clamp(1, 16);
     if fragments > 1 {
-        push(&mut a, "--concurrent-fragments", Some(&fragments.to_string()));
+        push(
+            &mut a,
+            "--concurrent-fragments",
+            Some(&fragments.to_string()),
+        );
     }
     let retries = opts.retries.min(100);
     if retries != 10 {
@@ -243,7 +264,11 @@ pub fn user_args(
     }
 
     let template = opts.filename_template.trim();
-    let template = if template.is_empty() { DEFAULT_FILENAME_TEMPLATE } else { template };
+    let template = if template.is_empty() {
+        DEFAULT_FILENAME_TEMPLATE
+    } else {
+        template
+    };
     if looks_absolute(template) {
         warnings.push(Warning::new(
             Level::Warn,
@@ -280,7 +305,9 @@ fn is_valid_rate(s: &str) -> bool {
 
 fn looks_absolute(t: &str) -> bool {
     let b = t.as_bytes();
-    (b.len() >= 2 && b[0].is_ascii_alphabetic() && b[1] == b':') || t.starts_with("\\\\") || t.starts_with('/')
+    (b.len() >= 2 && b[0].is_ascii_alphabetic() && b[1] == b':')
+        || t.starts_with("\\\\")
+        || t.starts_with('/')
 }
 
 /// Split a user-typed argument string. Whitespace separates arguments; `"..."` and `'...'`
@@ -331,11 +358,33 @@ const DANGEROUS: &[&str] = &[
 
 /// Flags TubeDeck manages itself; overriding them breaks the queue or progress display.
 const MANAGED: &[&str] = &[
-    "-o", "--output", "-P", "--paths", "-O", "--print", "--print-to-file",
-    "--progress-template", "-q", "--quiet", "--no-progress", "--newline",
-    "-s", "--simulate", "--skip-download", "-j", "--dump-json", "-J", "--dump-single-json",
-    "--ffmpeg-location", "--js-runtimes", "--no-js-runtimes",
-    "-a", "--batch-file", "-U", "--update", "--update-to",
+    "-o",
+    "--output",
+    "-P",
+    "--paths",
+    "-O",
+    "--print",
+    "--print-to-file",
+    "--progress-template",
+    "-q",
+    "--quiet",
+    "--no-progress",
+    "--newline",
+    "-s",
+    "--simulate",
+    "--skip-download",
+    "-j",
+    "--dump-json",
+    "-J",
+    "--dump-single-json",
+    "--ffmpeg-location",
+    "--js-runtimes",
+    "--no-js-runtimes",
+    "-a",
+    "--batch-file",
+    "-U",
+    "--update",
+    "--update-to",
 ];
 
 fn check_extra_args(args: &[String]) -> Vec<Warning> {
@@ -350,7 +399,9 @@ fn check_extra_args(args: &[String]) -> Vec<Warning> {
         } else if MANAGED.contains(&flag) {
             w.push(Warning::new(
                 Level::Warn,
-                format!("{flag} is managed by TubeDeck and may break downloads or progress reporting."),
+                format!(
+                    "{flag} is managed by TubeDeck and may break downloads or progress reporting."
+                ),
             ));
         } else if arg == "--" {
             w.push(Warning::new(
@@ -412,10 +463,23 @@ mod tests {
         assert_eq!(
             a,
             s(&[
-                "-f", "bv*+ba/b", "-S", "ext:mp4:m4a", "--merge-output-format", "mp4",
-                "--embed-thumbnail", "--embed-metadata", "--embed-chapters",
-                "--concurrent-fragments", "4",
-                "-P", FOLDER, "-o", DEFAULT_FILENAME_TEMPLATE, "--trim-filenames", "180",
+                "-f",
+                "bv*+ba/b",
+                "-S",
+                "ext:mp4:m4a",
+                "--merge-output-format",
+                "mp4",
+                "--embed-thumbnail",
+                "--embed-metadata",
+                "--embed-chapters",
+                "--concurrent-fragments",
+                "4",
+                "-P",
+                FOLDER,
+                "-o",
+                DEFAULT_FILENAME_TEMPLATE,
+                "--trim-filenames",
+                "180",
             ])
         );
         assert!(w.is_empty());
@@ -438,8 +502,16 @@ mod tests {
         assert_eq!(
             a,
             s(&[
-                "-f", "bv*+ba/b", "-S", "res:1080,vcodec:h264", "--merge-output-format", "mkv",
-                "-P", FOLDER, "-o", DEFAULT_FILENAME_TEMPLATE,
+                "-f",
+                "bv*+ba/b",
+                "-S",
+                "res:1080,vcodec:h264",
+                "--merge-output-format",
+                "mkv",
+                "-P",
+                FOLDER,
+                "-o",
+                DEFAULT_FILENAME_TEMPLATE,
             ])
         );
     }
@@ -454,14 +526,28 @@ mod tests {
             ..Default::default()
         };
         let (a, _) = args_of(&o);
-        assert_eq!(&a[..7], &s(&["-f", "ba/b", "-x", "--audio-format", "mp3", "--audio-quality", "2"])[..]);
+        assert_eq!(
+            &a[..7],
+            &s(&[
+                "-f",
+                "ba/b",
+                "-x",
+                "--audio-format",
+                "mp3",
+                "--audio-quality",
+                "2"
+            ])[..]
+        );
         assert!(a.contains(&"--embed-thumbnail".to_string()));
         assert!(!a.contains(&"--merge-output-format".to_string()));
     }
 
     #[test]
     fn audio_best_has_no_format_or_quality() {
-        let o = DownloadOptions { mode: Mode::Audio, ..Default::default() };
+        let o = DownloadOptions {
+            mode: Mode::Audio,
+            ..Default::default()
+        };
         let (a, _) = args_of(&o);
         assert!(!a.contains(&"--audio-format".to_string()));
         assert!(!a.contains(&"--audio-quality".to_string()));
@@ -469,7 +555,10 @@ mod tests {
 
     #[test]
     fn webm_skips_thumbnail_with_info() {
-        let o = DownloadOptions { container: Container::Webm, ..Default::default() };
+        let o = DownloadOptions {
+            container: Container::Webm,
+            ..Default::default()
+        };
         let (a, w) = args_of(&o);
         assert!(!a.contains(&"--embed-thumbnail".to_string()));
         assert_eq!(w.len(), 1);
@@ -486,12 +575,24 @@ mod tests {
         };
         let (a, _) = args_of(&o);
         let i = a.iter().position(|x| x == "--write-subs").unwrap();
-        assert_eq!(&a[i..i + 5], &s(&["--write-subs", "--write-auto-subs", "--sub-langs", "en.*,nl", "--embed-subs"])[..]);
+        assert_eq!(
+            &a[i..i + 5],
+            &s(&[
+                "--write-subs",
+                "--write-auto-subs",
+                "--sub-langs",
+                "en.*,nl",
+                "--embed-subs"
+            ])[..]
+        );
     }
 
     #[test]
     fn invalid_rate_is_ignored() {
-        let o = DownloadOptions { rate_limit: "fast".into(), ..Default::default() };
+        let o = DownloadOptions {
+            rate_limit: "fast".into(),
+            ..Default::default()
+        };
         let (a, w) = args_of(&o);
         assert!(!a.contains(&"--limit-rate".to_string()));
         assert_eq!(w[0].level, Level::Warn);
@@ -509,7 +610,10 @@ mod tests {
         assert!(!a.contains(&"-P".to_string()));
         assert_eq!(w.len(), 1);
 
-        let o = DownloadOptions { output_folder: r"D:\Media".into(), ..Default::default() };
+        let o = DownloadOptions {
+            output_folder: r"D:\Media".into(),
+            ..Default::default()
+        };
         let (a, _) = args_of(&o);
         let i = a.iter().position(|x| x == "-P").unwrap();
         assert_eq!(a[i + 1], r"D:\Media");
@@ -518,8 +622,18 @@ mod tests {
     #[test]
     fn split_keeps_windows_paths_and_quotes() {
         assert_eq!(
-            split_args(r#"--ffmpeg-location C:\tools\ffmpeg --match-filter "duration > 60" -x 'a b'"#).unwrap(),
-            s(&["--ffmpeg-location", r"C:\tools\ffmpeg", "--match-filter", "duration > 60", "-x", "a b"])
+            split_args(
+                r#"--ffmpeg-location C:\tools\ffmpeg --match-filter "duration > 60" -x 'a b'"#
+            )
+            .unwrap(),
+            s(&[
+                "--ffmpeg-location",
+                r"C:\tools\ffmpeg",
+                "--match-filter",
+                "duration > 60",
+                "-x",
+                "a b"
+            ])
         );
         assert_eq!(split_args(r#"--a="" b"#).unwrap(), s(&["--a=", "b"]));
         assert_eq!(split_args("   ").unwrap(), Vec::<String>::new());
@@ -534,12 +648,18 @@ mod tests {
         };
         let (a, w) = args_of(&o);
         assert!(a.ends_with(&s(&["--exec", "calc", "--output=foo.mp4", "--no-mtime"])));
-        assert_eq!(w.iter().map(|x| x.level).collect::<Vec<_>>(), vec![Level::Danger, Level::Warn]);
+        assert_eq!(
+            w.iter().map(|x| x.level).collect::<Vec<_>>(),
+            vec![Level::Danger, Level::Warn]
+        );
     }
 
     #[test]
     fn unclosed_quote_drops_extra_args() {
-        let o = DownloadOptions { extra_args: r#"--foo "bar"#.into(), ..Default::default() };
+        let o = DownloadOptions {
+            extra_args: r#"--foo "bar"#.into(),
+            ..Default::default()
+        };
         let (a, w) = args_of(&o);
         assert!(!a.contains(&"--foo".to_string()));
         assert_eq!(w[0].level, Level::Danger);
@@ -547,10 +667,20 @@ mod tests {
 
     #[test]
     fn build_appends_separator_and_url() {
-        let b = build("https://www.youtube.com/watch?v=abc&t=1", &DownloadOptions::default(), FOLDER);
-        assert_eq!(&b.args[b.args.len() - 2..], &s(&["--", "https://www.youtube.com/watch?v=abc&t=1"])[..]);
+        let b = build(
+            "https://www.youtube.com/watch?v=abc&t=1",
+            &DownloadOptions::default(),
+            FOLDER,
+        );
+        assert_eq!(
+            &b.args[b.args.len() - 2..],
+            &s(&["--", "https://www.youtube.com/watch?v=abc&t=1"])[..]
+        );
         assert!(b.display.starts_with("yt-dlp -f 'bv*+ba/b' "));
-        assert!(b.display.ends_with(" -- 'https://www.youtube.com/watch?v=abc&t=1'"));
+        assert!(
+            b.display
+                .ends_with(" -- 'https://www.youtube.com/watch?v=abc&t=1'")
+        );
         assert!(b.warnings.is_empty());
     }
 
@@ -578,7 +708,10 @@ mod tests {
         assert_eq!(powershell_quote("--embed-metadata"), "--embed-metadata");
         assert_eq!(powershell_quote(r"C:\Users\me"), r"C:\Users\me");
         assert_eq!(powershell_quote(r"C:\My Videos"), r"'C:\My Videos'");
-        assert_eq!(powershell_quote("res:1080,vcodec:h264"), "'res:1080,vcodec:h264'");
+        assert_eq!(
+            powershell_quote("res:1080,vcodec:h264"),
+            "'res:1080,vcodec:h264'"
+        );
         assert_eq!(powershell_quote("it's"), "'it''s'");
         assert_eq!(powershell_quote("@x"), "'@x'");
         assert_eq!(powershell_quote(""), "''");

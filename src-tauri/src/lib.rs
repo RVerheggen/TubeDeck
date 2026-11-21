@@ -27,7 +27,9 @@ pub fn run() {
             tauri_plugin_log::Builder::new()
                 .targets([
                     Target::new(TargetKind::Stdout),
-                    Target::new(TargetKind::LogDir { file_name: Some(LOG_FILE_NAME.into()) }),
+                    Target::new(TargetKind::LogDir {
+                        file_name: Some(LOG_FILE_NAME.into()),
+                    }),
                 ])
                 .level(log::LevelFilter::Info)
                 .max_file_size(2 * 1024 * 1024)
@@ -49,8 +51,17 @@ pub fn run() {
                 .map(|d| d.join("TubeDeck").display().to_string())
                 .unwrap_or_default();
 
-            log::info!("TubeDeck {} starting; config in {}", app.package_info().version, config_dir.display());
-            app.manage(AppState::load(config_dir, log_dir, managed_bin_dir, default_download_folder));
+            log::info!(
+                "TubeDeck {} starting; config in {}",
+                app.package_info().version,
+                config_dir.display()
+            );
+            app.manage(AppState::load(
+                config_dir,
+                log_dir,
+                managed_bin_dir,
+                default_download_folder,
+            ));
             app.manage(Engine::new(app.handle().clone(), temp_root));
             Ok(())
         })
@@ -68,6 +79,11 @@ pub fn run() {
             commands::enqueue_jobs,
             commands::list_jobs,
             commands::cancel_job,
+            commands::pause_job,
+            commands::resume_job,
+            commands::pause_all_jobs,
+            commands::resume_all_jobs,
+            commands::move_job,
             commands::retry_job,
             commands::remove_job,
             commands::clear_finished_jobs,

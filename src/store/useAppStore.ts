@@ -40,7 +40,14 @@ interface AppState {
   enqueue: (urls: string[]) => Promise<void>;
   applyJobUpdates: (jobs: Job[]) => void;
   applyJobRemovals: (ids: string[]) => void;
+  applyJobOrder: (ids: string[]) => void;
   cancelJob: (id: string) => Promise<void>;
+  pauseJob: (id: string) => Promise<void>;
+  resumeJob: (id: string) => Promise<void>;
+  pauseAll: () => Promise<void>;
+  resumeAll: () => Promise<void>;
+  /** Move `id` so it sits where `targetId` is now (drag and drop). */
+  moveJob: (id: string, targetId: string) => Promise<void>;
   retryJob: (id: string) => Promise<void>;
   removeJob: (id: string) => Promise<void>;
   clearFinished: () => Promise<void>;
@@ -103,6 +110,7 @@ export const useAppStore = create<AppState>((set, get) => {
         await onJobEvents({
           updated: (jobs) => get().applyJobUpdates(jobs),
           removed: (ids) => get().applyJobRemovals(ids),
+          order: (ids) => get().applyJobOrder(ids),
         });
         const [settings, presets, jobs] = await Promise.all([api.getSettings(), api.listPresets(), api.listJobs()]);
         set({ settings, presets, jobs, ready: true });
@@ -214,7 +222,28 @@ export const useAppStore = create<AppState>((set, get) => {
       set({ jobs: get().jobs.filter((j) => !gone.has(j.id)) });
     },
 
+    applyJobOrder: (ids) => {
+      const pos = new Map(ids.map((id, i) => [id, i]));
+      const end = ids.length;
+      set({ jobs: [...get().jobs].sort((a, b) => (pos.get(a.id) ?? end) - (pos.get(b.id) ?? end)) });
+    },
+
     cancelJob: (id) => jobAction(() => api.cancelJob(id)),
+    pauseJob: (id) => jobAction(() => api.pauseJob(id)),
+    resumeJob: (id) => jobAction(() => api.resumeJob(id)),
+    pauseAll: () => jobAction(() => api.pauseAllJobs()),
+    resumeAll: () => jobAction(() => api.resumeAllJobs()),
+    moveJob: (id, targetId) => {
+      const jobs = get().jobs;
+      const to = jobs.findIndex((j) => j.id === targetId);
+      if (to < 0 || id === targetId) return Promise.resolve();
+      // Optimistic reorder so the card doesn't jump back while the backend confirms.
+      const moving = jobs.find((j) => j.id === id)!;
+      const rest = jobs.filter((j) => j.id !== id);
+      rest.splice(to, 0, moving);
+      set({ jobs: rest });
+      return jobAction(() => api.moveJob(id, to));
+    },
     retryJob: (id) => jobAction(() => api.retryJob(id)),
     removeJob: (id) => jobAction(() => api.removeJob(id)),
     clearFinished: () => jobAction(() => api.clearFinishedJobs()),

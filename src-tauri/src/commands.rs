@@ -122,6 +122,32 @@ pub fn cancel_job(engine: State<'_, Arc<Engine>>, id: String) -> CmdResult<()> {
 }
 
 #[tauri::command]
+pub fn pause_job(engine: State<'_, Arc<Engine>>, id: String) -> CmdResult<()> {
+    engine.pause(&id)
+}
+
+#[tauri::command]
+pub fn resume_job(engine: State<'_, Arc<Engine>>, id: String) -> CmdResult<()> {
+    engine.resume(&id)
+}
+
+#[tauri::command]
+pub fn pause_all_jobs(engine: State<'_, Arc<Engine>>) -> CmdResult<()> {
+    engine.pause_all()
+}
+
+#[tauri::command]
+pub fn resume_all_jobs(engine: State<'_, Arc<Engine>>) -> CmdResult<()> {
+    engine.resume_all()
+}
+
+/// Move a job to position `to` in the queue (0 = top).
+#[tauri::command]
+pub fn move_job(engine: State<'_, Arc<Engine>>, id: String, to: usize) -> CmdResult<()> {
+    engine.move_to(&id, to)
+}
+
+#[tauri::command]
 pub fn retry_job(engine: State<'_, Arc<Engine>>, id: String) -> CmdResult<()> {
     engine.retry(&id)
 }
@@ -172,7 +198,10 @@ pub fn parse_url_list(text: &str) -> Vec<ParsedUrl> {
     let mut seen = std::collections::HashSet::new();
     text.split_whitespace()
         .filter(|t| seen.insert(t.to_string()))
-        .map(|t| ParsedUrl { url: t.to_string(), error: args::validate_url(t).err() })
+        .map(|t| ParsedUrl {
+            url: t.to_string(),
+            error: args::validate_url(t).err(),
+        })
         .collect()
 }
 
@@ -205,7 +234,11 @@ pub fn delete_preset(state: State<'_, AppState>, id: String) -> CmdResult<()> {
 pub async fn engine_status(state: State<'_, AppState>) -> CmdResult<EngineStatus> {
     let (y, f, d) = {
         let s = state.settings.lock().unwrap();
-        (s.ytdlp_path.clone(), s.ffmpeg_path.clone(), s.deno_path.clone())
+        (
+            s.ytdlp_path.clone(),
+            s.ffmpeg_path.clone(),
+            s.deno_path.clone(),
+        )
     };
     let dir = state.managed_bin_dir.clone();
     tauri::async_runtime::spawn_blocking(move || binaries::engine_status(&y, &f, &d, &dir))
@@ -232,7 +265,10 @@ pub fn read_app_log(state: State<'_, AppState>, max_lines: Option<usize>) -> Cmd
     };
     let lines: Vec<String> = text.lines().map(String::from).collect();
     let start = lines.len().saturating_sub(max);
-    Ok(AppLog { path: path.display().to_string(), lines: lines[start..].to_vec() })
+    Ok(AppLog {
+        path: path.display().to_string(),
+        lines: lines[start..].to_vec(),
+    })
 }
 
 #[derive(Debug, Serialize)]
@@ -260,7 +296,8 @@ mod tests {
 
     #[test]
     fn parses_and_dedupes_urls() {
-        let r = parse_url_list("https://a.com/1\n  https://a.com/1 https://b.com/2\r\nnot-a-url\n\n");
+        let r =
+            parse_url_list("https://a.com/1\n  https://a.com/1 https://b.com/2\r\nnot-a-url\n\n");
         assert_eq!(r.len(), 3);
         assert!(r[0].error.is_none());
         assert!(r[1].error.is_none());

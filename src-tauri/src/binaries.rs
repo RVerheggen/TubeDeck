@@ -54,9 +54,21 @@ pub struct Spec {
     pub version_args: &'static [&'static str],
 }
 
-pub const YTDLP: Spec = Spec { name: "yt-dlp", exe: "yt-dlp.exe", version_args: &["--version"] };
-pub const FFMPEG: Spec = Spec { name: "FFmpeg", exe: "ffmpeg.exe", version_args: &["-version"] };
-pub const DENO: Spec = Spec { name: "Deno", exe: "deno.exe", version_args: &["--version"] };
+pub const YTDLP: Spec = Spec {
+    name: "yt-dlp",
+    exe: "yt-dlp.exe",
+    version_args: &["--version"],
+};
+pub const FFMPEG: Spec = Spec {
+    name: "FFmpeg",
+    exe: "ffmpeg.exe",
+    version_args: &["-version"],
+};
+pub const DENO: Spec = Spec {
+    name: "Deno",
+    exe: "deno.exe",
+    version_args: &["--version"],
+};
 
 /// Minimum Deno version supported by yt-dlp's EJS challenge solver.
 const DENO_MIN: (u32, u32, u32) = (2, 3, 0);
@@ -167,11 +179,16 @@ pub fn run_capture(path: &Path, args: &[&str], timeout: Duration) -> Result<Stri
         let _ = tx.send(child.wait_with_output());
     });
     match rx.recv_timeout(timeout) {
-        Ok(Ok(out)) if out.status.success() => Ok(String::from_utf8_lossy(&out.stdout).into_owned()),
+        Ok(Ok(out)) if out.status.success() => {
+            Ok(String::from_utf8_lossy(&out.stdout).into_owned())
+        }
         Ok(Ok(out)) => Err(format!(
             "Exited with {}: {}",
             out.status,
-            String::from_utf8_lossy(&out.stderr).lines().next().unwrap_or("")
+            String::from_utf8_lossy(&out.stderr)
+                .lines()
+                .next()
+                .unwrap_or("")
         )),
         Ok(Err(e)) => Err(e.to_string()),
         Err(_) => {
@@ -198,16 +215,28 @@ pub fn parse_version(name: &str, out: &str) -> Option<String> {
         // "2025.11.12"
         "yt-dlp" => Some(first.to_string()),
         // "ffmpeg version N-119396-g48c0dba23b-20250428 Copyright (c) ..."
-        "FFmpeg" => first.strip_prefix("ffmpeg version ")?.split_whitespace().next().map(String::from),
+        "FFmpeg" => first
+            .strip_prefix("ffmpeg version ")?
+            .split_whitespace()
+            .next()
+            .map(String::from),
         // "deno 2.5.6 (stable, release, x86_64-pc-windows-msvc)"
-        "Deno" => first.strip_prefix("deno ")?.split_whitespace().next().map(String::from),
+        "Deno" => first
+            .strip_prefix("deno ")?
+            .split_whitespace()
+            .next()
+            .map(String::from),
         _ => Some(first.to_string()),
     }
 }
 
 pub fn parse_semver(v: &str) -> Option<(u32, u32, u32)> {
     let mut it = v.split(['.', '-', '+']).map(|p| p.parse::<u32>());
-    Some((it.next()?.ok()?, it.next()?.ok()?, it.next().and_then(Result::ok).unwrap_or(0)))
+    Some((
+        it.next()?.ok()?,
+        it.next()?.ok()?,
+        it.next().and_then(Result::ok).unwrap_or(0),
+    ))
 }
 
 #[cfg(test)]
@@ -216,17 +245,28 @@ mod tests {
 
     #[test]
     fn parses_versions() {
-        assert_eq!(parse_version("yt-dlp", "2025.11.12\n").as_deref(), Some("2025.11.12"));
+        assert_eq!(
+            parse_version("yt-dlp", "2025.11.12\n").as_deref(),
+            Some("2025.11.12")
+        );
         assert_eq!(
             parse_version("FFmpeg", "ffmpeg version N-119396-g48c0dba23b-20250428 Copyright (c) 2000-2025\nbuilt with gcc").as_deref(),
             Some("N-119396-g48c0dba23b-20250428")
         );
         assert_eq!(
-            parse_version("FFmpeg", "ffmpeg version 7.1-full_build-www.gyan.dev Copyright").as_deref(),
+            parse_version(
+                "FFmpeg",
+                "ffmpeg version 7.1-full_build-www.gyan.dev Copyright"
+            )
+            .as_deref(),
             Some("7.1-full_build-www.gyan.dev")
         );
         assert_eq!(
-            parse_version("Deno", "deno 2.5.6 (stable, release, x86_64-pc-windows-msvc)\nv8 14.0").as_deref(),
+            parse_version(
+                "Deno",
+                "deno 2.5.6 (stable, release, x86_64-pc-windows-msvc)\nv8 14.0"
+            )
+            .as_deref(),
             Some("2.5.6")
         );
         assert_eq!(parse_version("Deno", "garbage"), None);
@@ -243,7 +283,11 @@ mod tests {
 
     #[test]
     fn configured_missing_path_is_reported() {
-        let st = status(&YTDLP, r"C:\definitely\not\here\yt-dlp.exe", Path::new(r"C:\nope"));
+        let st = status(
+            &YTDLP,
+            r"C:\definitely\not\here\yt-dlp.exe",
+            Path::new(r"C:\nope"),
+        );
         assert!(!st.found);
         assert_eq!(st.source, Some(Source::Configured));
         assert_eq!(st.note.as_deref(), Some("Configured path does not exist"));

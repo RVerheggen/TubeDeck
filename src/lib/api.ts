@@ -39,6 +39,11 @@ export const api = {
     call<Job[]>("enqueue_jobs", { urls, options, presetName }),
   listJobs: () => call<Job[]>("list_jobs"),
   cancelJob: (id: string) => call<void>("cancel_job", { id }),
+  pauseJob: (id: string) => call<void>("pause_job", { id }),
+  resumeJob: (id: string) => call<void>("resume_job", { id }),
+  pauseAllJobs: () => call<void>("pause_all_jobs"),
+  resumeAllJobs: () => call<void>("resume_all_jobs"),
+  moveJob: (id: string, to: number) => call<void>("move_job", { id, to }),
   retryJob: (id: string) => call<void>("retry_job", { id }),
   removeJob: (id: string) => call<void>("remove_job", { id }),
   clearFinishedJobs: () => call<void>("clear_finished_jobs"),
@@ -49,12 +54,14 @@ export const api = {
 export async function onJobEvents(handlers: {
   updated: (jobs: Job[]) => void;
   removed: (ids: string[]) => void;
+  order: (ids: string[]) => void;
 }): Promise<() => void> {
   if (!inDesktop) return mockSubscribe(handlers);
   const { listen } = await import("@tauri-apps/api/event");
   const offs = await Promise.all([
     listen<Job[]>("jobs://updated", (e) => handlers.updated(e.payload)),
     listen<string[]>("jobs://removed", (e) => handlers.removed(e.payload)),
+    listen<string[]>("jobs://order", (e) => handlers.order(e.payload)),
   ]);
   return () => offs.forEach((off) => off());
 }

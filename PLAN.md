@@ -289,7 +289,9 @@ Optional: generate TS types from Rust (`ts-rs` or `tauri-specta`) so `lib/types.
 3. ✅ **M2. Minimal engine.** Streaming runner + progress parser + batched events → real cards (B3). Includes `CREATE_NO_WINDOW` and the Job Object from the first real download, so there are no console windows and no orphaned ffmpeg. *This is where v1 becomes useful.*
    Delivered earlier than planned: cancel (kills the process tree), retry, a per-job temp dir, a per-job log viewer, and concurrency limits that apply live. The queue uses a `Mutex` plus a schedule-on-change design rather than an actor; it is simple and has worked well so far.
    Found during E2E testing: yt-dlp writes `postprocess` progress lines to **stderr**, so the runner merges both streams through one parser.
-4. **M3. Manager.** Pause/resume (kill and restart, keeping partial files), auto-retry with backoff for transient errors (e.g. YouTube HTTP 403), reordering (B2, B5 part 1).
+4. ✅ **M3. Manager.** Pause/resume (kill and restart, keeping partial files), auto-retry with backoff for transient errors (e.g. YouTube HTTP 403), reordering (B2, B5 part 1).
+   Also delivered: pause all / resume all, error classification with friendly hints (the B8 list, pulled forward from M6), an auto-retry setting (0–5, default 3), and drag-and-drop reordering with a `jobs://order` event.
+   Verified end to end: resuming continued from the partial file (9.9% → 9.9%, not 0), pausing left no processes running, a reordered job started first, a network error retried after 5s and then 20s, and an unavailable video failed without retrying.
 5. **M4. Persistence.** SQLite, history, per-job logs, startup recovery, graceful shutdown (B4).
 6. **M5. Playlists.** Probe + picker + grouped jobs (B5 part 2).
 7. **M6. Binaries.** First-run setup, managed downloads, yt-dlp updates, error classification (B6, B8).

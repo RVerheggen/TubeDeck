@@ -36,7 +36,11 @@ pub fn builtins() -> Vec<Preset> {
             "1080p-h264",
             "1080p H.264",
             "Up to 1080p with H.264 video for maximum player compatibility.",
-            DownloadOptions { quality: Quality::P1080, video_codec: VideoCodec::H264, ..d() },
+            DownloadOptions {
+                quality: Quality::P1080,
+                video_codec: VideoCodec::H264,
+                ..d()
+            },
         ),
         builtin(
             "audio-mp3",
@@ -53,7 +57,11 @@ pub fn builtins() -> Vec<Preset> {
             "audio-opus",
             "Audio Opus",
             "Best audio stream kept as Opus; small files, excellent quality.",
-            DownloadOptions { mode: Mode::Audio, audio_format: AudioFormat::Opus, ..d() },
+            DownloadOptions {
+                mode: Mode::Audio,
+                audio_format: AudioFormat::Opus,
+                ..d()
+            },
         ),
         builtin(
             "archive",
@@ -115,7 +123,10 @@ pub fn remove(user: &mut Vec<Preset>, id: &str) -> Result<(), String> {
 
 fn new_id() -> String {
     use std::time::{SystemTime, UNIX_EPOCH};
-    let nanos = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0);
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0);
     format!("user-{nanos:x}")
 }
 
@@ -149,7 +160,14 @@ mod tests {
         let p = upsert(&mut user, user_preset("", "  Mine  ")).unwrap();
         assert!(p.id.starts_with("user-"));
         assert_eq!(p.name, "Mine");
-        upsert(&mut user, Preset { name: "Renamed".into(), ..p.clone() }).unwrap();
+        upsert(
+            &mut user,
+            Preset {
+                name: "Renamed".into(),
+                ..p.clone()
+            },
+        )
+        .unwrap();
         assert_eq!(user.len(), 1);
         assert_eq!(user[0].name, "Renamed");
     }

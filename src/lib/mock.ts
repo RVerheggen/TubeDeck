@@ -5,7 +5,7 @@ import type { BuiltCommand, DownloadOptions, Job, Preset, Settings } from "./typ
 
 // ---- Simulated download engine (browser preview only) ------------------------------
 
-type Handlers = { updated: (jobs: Job[]) => void; removed: (ids: string[]) => void };
+type Handlers = { updated: (jobs: Job[]) => void; removed: (ids: string[]) => void; order: (ids: string[]) => void };
 const subscribers = new Set<Handlers>();
 let jobs: Job[] = [];
 let seq = 0;
@@ -20,8 +20,9 @@ const emit = (changed: Job[]) => changed.length && subscribers.forEach((s) => s.
 setInterval(() => {
   const changed: Job[] = [];
   const running = jobs.filter((j) => ["starting", "downloading", "processing"].includes(j.status));
-  for (const j of jobs.filter((x) => x.status === "queued").slice(0, Math.max(0, settings.maxConcurrent - running.length))) {
-    Object.assign(j, { status: "downloading", startedAt: Date.now(), title: `Sample video ${j.id}`, stage: "Stream 1/2" });
+  const ready = jobs.filter((x) => x.status === "queued" && (x.retryAt == null || x.retryAt <= Date.now()));
+  for (const j of ready.slice(0, Math.max(0, settings.maxConcurrent - running.length))) {
+    Object.assign(j, { status: "downloading", startedAt: Date.now(), retryAt: null, title: `Sample video ${j.id}`, stage: "Stream 1/2" });
     changed.push(j);
   }
   for (const j of jobs.filter((x) => x.status === "downloading" || x.status === "processing")) {
@@ -30,7 +31,13 @@ setInterval(() => {
     j.progress = { percent: pct, downloadedBytes: (total * pct) / 100, totalBytes: total, speed: 2_500_000 + Math.random() * 1e6, eta: Math.round(((100 - pct) / 100) * 20) };
     j.stage = pct < 50 ? "Stream 1/2" : pct < 95 ? "Stream 2/2" : "Merging formats";
     j.status = pct >= 95 ? "processing" : "downloading";
-    if (pct >= 100) {
+    if (pct >= 40 && j.url.includes("retry") && j.attempts < settings.autoRetry) {
+      Object.assign(j, {
+        status: "queued", attempts: j.attempts + 1, retryAt: Date.now() + 5000, stage: `Retry ${j.attempts + 1}/${settings.autoRetry}`,
+        error: "unable to download video data: HTTP Error 403: Forbidden (simulated)", errorKind: "http403",
+        errorHint: "The site refused the download. This is usually temporary; if it keeps happening, update yt-dlp.",
+      });
+    } else if (pct >= 100) {
       const failed = j.url.includes("fail");
       Object.assign(j, { status: failed ? "failed" : "completed", stage: null, finishedAt: Date.now() });
       if (failed) j.error = "[youtube] abc: Video unavailable (simulated)";
@@ -70,6 +77,7 @@ let settings: Settings = {
   theme: "system",
   downloadFolder: "C:\\Users\\you\\Downloads\\TubeDeck",
   maxConcurrent: 3,
+  autoRetry: 3,
   ytdlpPath: "",
   ffmpegPath: "",
   denoPath: "",
@@ -160,6 +168,10 @@ export async function mock<T>(cmd: string, args?: Record<string, unknown>): Prom
         startedAt: null,
         finishedAt: null,
         error: null,
+        errorKind: null,
+        errorHint: null,
+        attempts: 0,
+        retryAt: null,
       }));
       jobs.push(...created);
       return r(created);
@@ -167,12 +179,33 @@ export async function mock<T>(cmd: string, args?: Record<string, unknown>): Prom
     case "list_jobs":
       return r(jobs);
     case "cancel_job":
+    case "pause_job":
+    case "resume_job":
     case "retry_job": {
       const j = jobs.find((x) => x.id === a.id);
       if (j) {
-        if (cmd === "cancel_job") Object.assign(j, { status: "canceled", stage: null, finishedAt: Date.now() });
-        else Object.assign(j, { status: "queued", error: null, finishedAt: null, progress: { percent: null, downloadedBytes: null, totalBytes: null, speed: null, eta: null } });
+        if (cmd === "cancel_job") Object.assign(j, { status: "canceled", stage: null, retryAt: null, finishedAt: Date.now() });
+        else if (cmd === "pause_job") Object.assign(j, { status: "paused", stage: "Paused", retryAt: null });
+        else if (cmd === "resume_job") Object.assign(j, { status: "queued", stage: null });
+        else Object.assign(j, { status: "queued", error: null, errorKind: null, errorHint: null, attempts: 0, finishedAt: null, progress: { percent: null, downloadedBytes: null, totalBytes: null, speed: null, eta: null } });
         emit([j]);
+      }
+      return r(undefined);
+    }
+    case "pause_all_jobs":
+    case "resume_all_jobs": {
+      const from = cmd === "pause_all_jobs" ? ["queued", "downloading", "processing", "starting"] : ["paused"];
+      const changed = jobs.filter((j) => from.includes(j.status));
+      changed.forEach((j) => Object.assign(j, cmd === "pause_all_jobs" ? { status: "paused", stage: "Paused", retryAt: null } : { status: "queued", stage: null }));
+      emit(changed);
+      return r(undefined);
+    }
+    case "move_job": {
+      const i = jobs.findIndex((j) => j.id === a.id);
+      if (i >= 0) {
+        const [j] = jobs.splice(i, 1);
+        jobs.splice(Math.min(Number(a.to), jobs.length), 0, j);
+        subscribers.forEach((s) => s.order(jobs.map((x) => x.id)));
       }
       return r(undefined);
     }

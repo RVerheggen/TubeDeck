@@ -77,13 +77,25 @@ export function SettingsView() {
               ]}
             />
           </Field>
-          <Field label={`Simultaneous downloads: ${settings.maxConcurrent}`} hint="Used by the download engine (M2/M3).">
+          <Field label={`Simultaneous downloads: ${settings.maxConcurrent}`} hint="Changes apply immediately.">
             <input
               type="range"
               min={1}
               max={10}
               value={settings.maxConcurrent}
               onChange={(e) => update({ maxConcurrent: Number(e.target.value) })}
+            />
+          </Field>
+          <Field
+            label={`Automatic retries: ${settings.autoRetry === 0 ? "off" : settings.autoRetry}`}
+            hint="For temporary failures (network errors, HTTP 403/429/5xx). Waits 5s, 20s, 60s, … between attempts and resumes partial files."
+          >
+            <input
+              type="range"
+              min={0}
+              max={5}
+              value={settings.autoRetry}
+              onChange={(e) => update({ autoRetry: Number(e.target.value) })}
             />
           </Field>
           <Field label="Default download folder" wide>

@@ -1,7 +1,7 @@
 //! Runs one yt-dlp process for a job and streams its output into the engine.
 
 use super::{
-    Engine,
+    Engine, Outcome,
     job::JobStatus,
     progress::{self, Line, Tracker},
     winjob::ProcessTree,
@@ -67,15 +67,24 @@ fn prepare(engine: &Engine, id: &str) -> Result<Prepared, String> {
     let state = engine.app.state::<AppState>();
     let (folder, y_cfg, f_cfg, d_cfg) = {
         let s = state.settings.lock().unwrap();
-        (s.download_folder.clone(), s.ytdlp_path.clone(), s.ffmpeg_path.clone(), s.deno_path.clone())
+        (
+            s.download_folder.clone(),
+            s.ytdlp_path.clone(),
+            s.ffmpeg_path.clone(),
+            s.deno_path.clone(),
+        )
     };
     let bin = &state.managed_bin_dir;
 
     let (program, _) = binaries::resolve(&binaries::YTDLP, &y_cfg, bin)
         .filter(|(p, _)| p.is_file())
         .ok_or("yt-dlp was not found. Install it or set its path in Settings → Engine.")?;
-    let ffmpeg = binaries::resolve(&binaries::FFMPEG, &f_cfg, bin).map(|(p, _)| p).filter(|p| p.is_file());
-    let deno = binaries::resolve(&binaries::DENO, &d_cfg, bin).map(|(p, _)| p).filter(|p| p.is_file());
+    let ffmpeg = binaries::resolve(&binaries::FFMPEG, &f_cfg, bin)
+        .map(|(p, _)| p)
+        .filter(|p| p.is_file());
+    let deno = binaries::resolve(&binaries::DENO, &d_cfg, bin)
+        .map(|(p, _)| p)
+        .filter(|p| p.is_file());
 
     let temp_dir = engine.temp_dir(id);
     std::fs::create_dir_all(&temp_dir).map_err(|e| format!("Could not create temp folder: {e}"))?;
@@ -87,14 +96,22 @@ fn prepare(engine: &Engine, id: &str) -> Result<Prepared, String> {
     a.push(job.url.clone());
 
     let display = args::powershell_display(&program.display().to_string(), &a);
-    let mut warnings: Vec<String> = warnings.into_iter().map(|w| format!("[TubeDeck] {:?}: {}", w.level, w.message)).collect();
+    let mut warnings: Vec<String> = warnings
+        .into_iter()
+        .map(|w| format!("[TubeDeck] {:?}: {}", w.level, w.message))
+        .collect();
     if ffmpeg.is_none() {
         warnings.push("[TubeDeck] FFmpeg not found: merging and conversion will fail.".into());
     }
     if deno.is_none() {
         warnings.push("[TubeDeck] Deno not found: YouTube may offer fewer formats.".into());
     }
-    Ok(Prepared { program, args: a, display, warnings })
+    Ok(Prepared {
+        program,
+        args: a,
+        display,
+        warnings,
+    })
 }
 
 pub async fn run(engine: Arc<Engine>, id: String) {
@@ -103,11 +120,15 @@ pub async fn run(engine: Arc<Engine>, id: String) {
         Err(e) => {
             log::error!("Job {id} could not start: {e}");
             engine.push_log(&id, format!("[TubeDeck] {e}"));
-            engine.finish(&id, |job, _| {
-                job.status = JobStatus::Failed;
-                job.stage = None;
-                job.error = Some(e);
-            });
+            // Treat as a TubeDeck-side failure (e.g. yt-dlp missing): message as the error line.
+            engine.complete(
+                &id,
+                Outcome {
+                    exit: Err(e.clone()),
+                    output: None,
+                    stderr_tail: vec![format!("ERROR: {e}")],
+                },
+            );
             return;
         }
     };
@@ -134,11 +155,14 @@ pub async fn run(engine: Arc<Engine>, id: String) {
             let msg = format!("Could not start yt-dlp: {e}");
             log::error!("Job {id}: {msg}");
             engine.push_log(&id, format!("[TubeDeck] {msg}"));
-            engine.finish(&id, |job, _| {
-                job.status = JobStatus::Failed;
-                job.stage = None;
-                job.error = Some(msg);
-            });
+            engine.complete(
+                &id,
+                Outcome {
+                    exit: Err(msg),
+                    output: None,
+                    stderr_tail: Vec::new(),
+                },
+            );
             return;
         }
     };
@@ -169,7 +193,11 @@ pub async fn run(engine: Arc<Engine>, id: String) {
     // stderr, so both streams feed one ordered channel and go through the same parser.
     let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<(bool, String)>();
     for (is_err, reader) in [
-        (false, Box::new(child.stdout.take().expect("stdout piped")) as Box<dyn AsyncRead + Unpin + Send>),
+        (
+            false,
+            Box::new(child.stdout.take().expect("stdout piped"))
+                as Box<dyn AsyncRead + Unpin + Send>,
+        ),
         (true, Box::new(child.stderr.take().expect("stderr piped"))),
     ] {
         let tx = tx.clone();
@@ -196,51 +224,27 @@ pub async fn run(engine: Arc<Engine>, id: String) {
         handle_line(&engine, &id, &mut tracker, &mut output, parsed);
     }
 
-    let status = child.wait().await;
-    let tail: Vec<String> = stderr_tail.into();
-
-    let temp_dir = engine.temp_dir(&id);
-    let mut outcome = String::new();
-    engine.finish(&id, |job, canceled| {
-        job.progress.speed = None;
-        job.progress.eta = None;
-        job.stage = None;
-        match &status {
-            _ if canceled => {
-                job.status = JobStatus::Canceled;
-            }
-            Ok(s) if s.success() => {
-                job.status = JobStatus::Completed;
-                job.progress.percent = Some(100.0);
-                if output.is_some() {
-                    job.output_path = output.clone();
-                }
-            }
-            Ok(s) => {
-                job.status = JobStatus::Failed;
-                job.error = Some(
-                    progress::error_message(&tail)
-                        .unwrap_or_else(|| format!("yt-dlp exited with code {}", s.code().unwrap_or(-1))),
-                );
-            }
-            Err(e) => {
-                job.status = JobStatus::Failed;
-                job.error = Some(format!("Lost track of yt-dlp: {e}"));
-            }
-        }
-        outcome = format!("{:?}{}", job.status, job.error.as_deref().map(|e| format!(": {e}")).unwrap_or_default());
-    });
-    log::info!("Job {id} finished: {outcome}");
-    engine.push_log(&id, format!("[TubeDeck] Finished: {outcome}"));
-
-    // Partial files are kept after a failure so Retry can resume them.
-    let keep_partials = engine.job(&id).is_some_and(|j| j.status == JobStatus::Failed);
-    if !keep_partials {
-        let _ = std::fs::remove_dir_all(&temp_dir);
-    }
+    let exit = child
+        .wait()
+        .await
+        .map_err(|e| format!("Lost track of yt-dlp: {e}"));
+    engine.complete(
+        &id,
+        Outcome {
+            exit,
+            output,
+            stderr_tail: stderr_tail.into(),
+        },
+    );
 }
 
-fn handle_line(engine: &Engine, id: &str, tracker: &mut Tracker, output: &mut Option<String>, line: Line) {
+fn handle_line(
+    engine: &Engine,
+    id: &str,
+    tracker: &mut Tracker,
+    output: &mut Option<String>,
+    line: Line,
+) {
     match line {
         Line::Info(info) => {
             tracker.on_info(&info);
@@ -255,7 +259,13 @@ fn handle_line(engine: &Engine, id: &str, tracker: &mut Tracker, output: &mut Op
                 job.status = JobStatus::Downloading;
                 job.stage = stage.or(Some("Downloading".into()));
             });
-            engine.push_log(id, format!("[TubeDeck] Downloading {}", info.title.as_deref().unwrap_or("item")));
+            engine.push_log(
+                id,
+                format!(
+                    "[TubeDeck] Downloading {}",
+                    info.title.as_deref().unwrap_or("item")
+                ),
+            );
         }
         Line::Progress { format_id, data } => {
             let (p, stage) = tracker.on_progress(&format_id, &data);
@@ -311,7 +321,11 @@ mod tests {
 
     #[test]
     fn engine_args_include_templates_and_binaries() {
-        let a = engine_args(Path::new(r"C:\tmp\job1"), Some(Path::new(r"C:\bin\ffmpeg.exe")), Some(Path::new(r"C:\bin\deno.exe")));
+        let a = engine_args(
+            Path::new(r"C:\tmp\job1"),
+            Some(Path::new(r"C:\bin\ffmpeg.exe")),
+            Some(Path::new(r"C:\bin\deno.exe")),
+        );
         assert!(a.contains(&"--no-simulate".to_string()));
         assert!(a.iter().any(|x| x.starts_with("download:TD_PROG ")));
         assert!(a.iter().any(|x| x.starts_with("postprocess:TD_PP ")));

@@ -20,6 +20,8 @@ pub struct Settings {
     /// Default output folder when a job's options don't set one.
     pub download_folder: String,
     pub max_concurrent: u32,
+    /// Automatic retries for transient failures (network, HTTP 403/429/5xx). 0 = off.
+    pub auto_retry: u32,
     /// Optional explicit binary paths; empty = auto-detect.
     pub ytdlp_path: String,
     pub ffmpeg_path: String,
@@ -35,6 +37,7 @@ impl Default for Settings {
             theme: Theme::System,
             download_folder: String::new(),
             max_concurrent: 3,
+            auto_retry: 3,
             ytdlp_path: String::new(),
             ffmpeg_path: String::new(),
             deno_path: String::new(),
@@ -48,6 +51,7 @@ impl Settings {
     /// Clamp values that came from disk or the UI into valid ranges.
     pub fn sanitized(mut self) -> Self {
         self.max_concurrent = self.max_concurrent.clamp(1, 10);
+        self.auto_retry = self.auto_retry.min(5);
         self
     }
 }
