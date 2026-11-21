@@ -1,0 +1,1003 @@
+Let's build the first version as a real Windows desktop application, not just a visual prototype.
+
+I'll call it TubeDeck and use React, TypeScript, Tauri 2, Rust, yt-dlp and FFmpeg.
+
+The first implementation will include:
+
+- Working download queue with multiple simultaneous downloads.
+- URL input for individual videos and playlists.
+- Video, audio, codec and quality settings.
+- Advanced yt-dlp configuration.
+- Live command preview with copy functionality.
+- Download progress, speed and ETA.
+- Saved presets.
+- Dark and light themes.
+- Download history and diagnostic logs.
+- Windows installation and build instructions.
+
+I'll use custom CSS illustrations and icons, so the interface doesn't depend on downloading external design assets.
+
+One distinction: I can provide the complete copyable project source here, but cannot attach a verified ZIP file in this session.
+
+## 1. Project structure
+
+text
+
+```text
+
+TubeDeck/
+├── src/
+│   ├── components/
+│   │   ├── Sidebar.tsx
+│   │   ├── CommandPreview.tsx
+│   │   └── DownloadCard.tsx
+│   ├── App.tsx
+│   ├── main.tsx
+│   └── styles.css
+├── src-tauri/
+│   ├── src/
+│   │   └── lib.rs
+│   ├── capabilities/
+│   │   └── default.json
+│   ├── Cargo.toml
+│   └── tauri.conf.json
+├── index.html
+├── package.json
+└── README.md
+```
+
+## 2. Create the project
+
+Install Node.js LTS and Rust, then open PowerShell:
+
+powershell
+
+```powershell
+
+npm create tauri-app@latest TubeDeck
+```
+
+Choose:
+
+- TypeScript / JavaScript
+- npm
+- React
+- TypeScript
+
+Then enter the project:
+
+powershell
+
+```powershell
+
+cd TubeDeck
+npm install
+npm install lucide-react
+```
+
+## 3. Main application
+
+Replace `src/App.tsx` with the following. This implements the main workspace, navigation, configuration controls, queue display, presets and live command generation.
+
+## 4. Styling — `src/styles.css`
+
+This provides the Windows-inspired dark interface, sidebar, download cards, progress bars, configuration panels and responsive layout.
+
+css
+
+```css
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
+:root {
+  font-family: Inter, "Segoe UI", sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  min-width: 850px;
+}
+
+button, input, select, textarea {
+  font: inherit;
+}
+
+.app {
+  --bg: #171920;
+  --panel: #20232c;
+  --panel2: #272b35;
+  --border: #333844;
+  --text: #f1f2f5;
+  --muted: #969daa;
+  --accent: #e45c5c;
+  --green: #36bd85;
+  display: flex;
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.app.light {
+  --bg: #f4f5f8;
+  --panel: #ffffff;
+  --panel2: #f0f1f5;
+  --border: #dfe1e8;
+  --text: #20232c;
+  --muted: #777d8b;
+  --accent: #d94f50;
+  --green: #219c70;
+}
+
+.sidebar {
+  width: 245px;
+  min-width: 245px;
+  padding: 25px 17px;
+  border-right: 1px solid var(--border);
+  background: var(--panel);
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 8px 34px;
+}
+
+.brand strong {
+  display: block;
+  font-size: 18px;
+  letter-spacing: -.5px;
+}
+
+.brand small, .engine-status small {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+  margin-top: 3px;
+}
+
+.brand-icon {
+  width: 39px;
+  height: 39px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  color: white;
+  background: var(--accent);
+}
+
+.nav-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1.4px;
+  color: var(--muted);
+  padding: 0 10px 12px;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 11px 12px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  text-align: left;
+  margin-bottom: 4px;
+  font-size: 13px;
+  transition: .15s;
+}
+
+.nav-item:hover, .nav-item.selected {
+  color: var(--text);
+  background: var(--panel2);
+}
+
+.nav-item.selected {
+  box-shadow: inset 3px 0 var(--accent);
+}
+
+.nav-count {
+  margin-left: auto;
+  font-size: 11px;
+  background: var(--border);
+  padding: 3px 7px;
+  border-radius: 6px;
+}
+
+.sidebar-bottom { margin-top: auto; }
+
+.engine-status {
+  margin-top: 25px;
+  border: 1px solid var(--border);
+  padding: 14px;
+  border-radius: 10px;
+  font-size: 12px;
+}
+
+.status-dot {
+  display: inline-block;
+  height: 8px;
+  width: 8px;
+  border-radius: 50%;
+  background: var(--green);
+  margin-right: 8px;
+}
+
+.main {
+  flex: 1;
+  padding: 30px 38px 70px;
+  max-width: 1500px;
+  margin: auto;
+  min-width: 0;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 30px;
+}
+
+.breadcrumb {
+  color: var(--muted);
+  font-size: 11px;
+  margin-bottom: 7px;
+}
+
+h1 { font-size: 27px; margin: 0; }
+h2 { font-size: 16px; margin: 0; display: flex; gap: 9px; align-items: center; }
+p { color: var(--muted); font-size: 12px; margin: 7px 0 0; }
+
+.top-actions { display: flex; gap: 12px; align-items: center; }
+
+.avatar {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--panel2);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.add-panel, .queue-panel, .config-panel,
+.command-panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 13px;
+  padding: 22px;
+  margin-bottom: 20px;
+}
+
+.section-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.pill {
+  font-size: 10px;
+  color: var(--green);
+  background: #36bd8517;
+  padding: 6px 10px;
+  border-radius: 20px;
+}
+
+textarea, select, .field input:not([type=range]) {
+  width: 100%;
+  background: var(--panel2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  padding: 12px;
+  outline: none;
+}
+
+textarea { resize: vertical; min-height: 82px; font-size: 12px; }
+textarea:focus, select:focus, input:focus { border-color: var(--accent); }
+
+.add-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 15px;
+  margin-top: 14px;
+}
+
+.quick-settings { display: flex; gap: 8px; flex-wrap: wrap; }
+
+.quick-settings span {
+  font-size: 10px;
+  color: var(--muted);
+  padding: 7px 9px;
+  background: var(--panel2);
+  border-radius: 6px;
+}
+
+.primary-button, .secondary-button, .icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: .15s;
+}
+
+.primary-button {
+  border: 0;
+  color: white;
+  background: var(--accent);
+}
+
+.primary-button:hover { filter: brightness(1.1); }
+
+.secondary-button, .icon-button {
+  border: 1px solid var(--border);
+  background: var(--panel2);
+  color: var(--text);
+}
+
+.icon-button { padding: 9px; }
+
+.secondary-button:hover, .icon-button:hover {
+  border-color: var(--accent);
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 13px;
+  margin-bottom: 20px;
+}
+
+.stat-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  padding: 17px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.stat-icon {
+  background: var(--panel2);
+  padding: 10px;
+  border-radius: 9px;
+  color: var(--accent);
+}
+
+.stat-card small, .stat-card strong { display: block; }
+.stat-card small { color: var(--muted); font-size: 10px; }
+.stat-card strong { font-size: 21px; margin-top: 4px; }
+
+.download-card {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.download-card:last-child { border-bottom: 0; }
+
+.file-icon {
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border-radius: 9px;
+  background: var(--panel2);
+  color: var(--accent);
+}
+
+.download-info { flex: 1; min-width: 0; }
+
+.download-heading, .download-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.download-heading strong { font-size: 12px; }
+.download-heading span, .download-meta { color: var(--muted); font-size: 10px; }
+
+.progress-track {
+  height: 5px;
+  background: var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  margin: 10px 0 7px;
+}
+
+.progress-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+  transition: width .3s;
+}
+
+.config-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.field { display: flex; flex-direction: column; gap: 8px; }
+.field span { font-size: 11px; color: var(--muted); }
+.field select, .field input { font-size: 12px; }
+.field input[type=range] { accent-color: var(--accent); width: 100%; }
+
+.toggle-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 13px;
+  margin-top: 22px;
+  padding-top: 18px;
+  border-top: 1px solid var(--border);
+}
+
+.toggle-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.toggle-row input { accent-color: var(--accent); }
+
+.command-code {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  background: #11141b;
+  color: #c6d3ff;
+  padding: 18px;
+  border-radius: 9px;
+  font-size: 11px;
+  line-height: 1.8;
+  font-family: Consolas, monospace;
+}
+
+.copy-button { margin-top: 12px; }
+
+.preset-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  border-bottom: 1px solid var(--border);
+  padding: 16px 0;
+}
+
+.preset-row:last-child { border-bottom: 0; }
+.preset-row small { display: block; color: var(--muted); margin-top: 5px; }
+
+@media(max-width: 1050px) {
+  .sidebar { width: 200px; min-width: 200px; }
+  .main { padding: 25px 20px; }
+  .stats-grid { grid-template-columns: repeat(2, 1fr); }
+}
+
+@media(max-width: 850px) {
+  .sidebar { width: 70px; min-width: 70px; padding: 15px 8px; }
+  .sidebar .brand strong, .sidebar .brand small,
+  .sidebar .nav-label, .sidebar .nav-item:not(:has(svg)),
+  .sidebar .engine-status { display: none; }
+  .sidebar .nav-item { font-size: 0; justify-content: center; }
+  .sidebar .brand { justify-content: center; padding: 0 0 25px; }
+  .nav-count { display: none; }
+}
+```
+
+## 5. Rust download engine — `src-tauri/src/lib.rs`
+
+This is the native backend that launches yt-dlp without using a shell. It handles arguments separately, which is safer than constructing a PowerShell command.
+
+rust
+
+```rust
+
+use serde::Deserialize;
+use std::process::Command;
+use std::sync::{Arc, OnceLock};
+use tauri::Emitter;
+use tokio::sync::Semaphore;
+
+static DOWNLOAD_LIMIT: OnceLock<Arc<Semaphore>> = OnceLock::new();
+
+#[derive(Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct DownloadOptions {
+    quality: String,
+    format: String,
+    audio: String,
+    fragments: u32,
+    retries: u32,
+    thumbnail: bool,
+    metadata: bool,
+    chapters: bool,
+    subtitles: bool,
+    folder: String,
+    parallel: Option<usize>,
+}
+
+#[tauri::command]
+async fn enqueue_download(
+    app: tauri::AppHandle,
+    id: String,
+    url: String,
+    options: DownloadOptions,
+) -> Result<String, String> {
+    if url.trim().is_empty() {
+        return Err("URL cannot be empty".into());
+    }
+
+    if !(url.starts_with("https://") || url.starts_with("http://")) {
+        return Err("Only HTTP and HTTPS URLs are supported".into());
+    }
+
+    let limit = options.parallel.unwrap_or(3).clamp(1, 10);
+    let semaphore = DOWNLOAD_LIMIT.get_or_init(|| {
+        Arc::new(Semaphore::new(limit))
+    }).clone();
+
+    let permit = semaphore.acquire_owned()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let app_handle = app.clone();
+    let job_id = id.clone();
+
+    tokio::task::spawn_blocking(move || {
+        let _permit = permit;
+
+        let result = run_download(&url, &options);
+
+        match result {
+            Ok(output) => {
+                let _ = app_handle.emit(
+                    "download-finished",
+                    serde_json::json!({
+                        "id": job_id,
+                        "output": output
+                    })
+                );
+            }
+            Err(error) => {
+                let _ = app_handle.emit(
+                    "download-error",
+                    serde_json::json!({
+                        "id": job_id,
+                        "error": error
+                    })
+                );
+            }
+        }
+    });
+
+    Ok(id)
+}
+
+fn run_download(
+    url: &str,
+    options: &DownloadOptions
+) -> Result<String, String> {
+    let mut cmd = Command::new("yt-dlp");
+
+    cmd.arg("--newline")
+       .arg("--progress")
+       .arg("--no-warnings")
+       .arg("--concurrent-fragments")
+       .arg(options.fragments.to_string())
+       .arg("--retries")
+       .arg(options.retries.to_string());
+
+    if options.audio != "best" {
+        cmd.arg("-x")
+           .arg("--audio-format")
+           .arg(&options.audio)
+           .arg("--audio-quality")
+           .arg("0");
+    } else {
+        let format = format!(
+            "bv*[height<={}]+ba/b",
+            options.quality
+        );
+
+        if options.quality == "best" {
+            cmd.arg("-f").arg("bestvideo*+bestaudio/best");
+        } else {
+            cmd.arg("-f").arg(format);
+        }
+
+        cmd.arg("--merge-output-format")
+            .arg(&options.format);
+    }
+
+    if options.thumbnail {
+        cmd.arg("--embed-thumbnail");
+    }
+
+    if options.metadata {
+        cmd.arg("--embed-metadata");
+    }
+
+    if options.chapters {
+        cmd.arg("--embed-chapters");
+    }
+
+    if options.subtitles {
+        cmd.arg("--write-subs")
+           .arg("--write-auto-subs");
+    }
+
+    let output_template = format!(
+        "{}/%(title)s.%(ext)s",
+        options.folder.trim_end_matches(['/', '\\'])
+    );
+
+    cmd.arg("-o")
+        .arg(output_template)
+        .arg(url);
+
+    let output = cmd.output()
+        .map_err(|e| format!(
+            "Could not launch yt-dlp. Is it installed and on PATH? {e}"
+        ))?;
+
+    if output.status.success() {
+        Ok(String::from_utf8_lossy(&output.stdout).to_string())
+    } else {
+        Err(String::from_utf8_lossy(&output.stderr).to_string())
+    }
+}
+
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
+pub fn run() {
+    tauri::Builder::default()
+        .invoke_handler(tauri::generate_handler![
+            enqueue_download
+        ])
+        .run(tauri::generate_context!())
+        .expect("Error while running TubeDeck");
+}
+```
+
+Add the `parallel` value to the options object in `App.tsx`:
+
+tsx
+
+```tsx
+parallel
+```
+
+The backend uses a semaphore to limit simultaneous jobs. For the first implementation, this limit is initialized when the first job is submitted; changing the limit later requires restarting the engine.
+
+Important implementation note: the backend currently waits for each yt-dlp process to finish and emits completion/error events. The next integration step is to subscribe to those events in React and parse progress output so the illustrative progress cards become live. The frontend's initial sample cards are demonstration data, not real downloads.
+
+## 6. Tauri configuration
+
+`src-tauri/Cargo.toml`
+
+toml
+
+```toml
+
+[package]
+name = "tubedeck"
+version = "1.0.0"
+description = "A modern yt-dlp desktop manager"
+authors = ["TubeDeck"]
+edition = "2021"
+
+[lib]
+name = "tubedeck_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["sync", "rt", "macros"] }
+```
+
+`src-tauri/src/main.rs`
+
+rust
+
+```rust
+
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
+fn main() {
+    tubedeck_lib::run();
+}
+```
+
+`src-tauri/tauri.conf.json`
+
+json
+
+```json
+
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "TubeDeck",
+  "version": "1.0.0",
+  "identifier": "com.tubedeck.desktop",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "TubeDeck",
+        "width": 1400,
+        "height": 950,
+        "minWidth": 850,
+        "minHeight": 650,
+        "center": true,
+        "resizable": true
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' asset: http://asset.localhost data: https:"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis", "msi"],
+    "shortDescription": "A modern yt-dlp download manager",
+    "category": "Utility"
+  }
+}
+```
+
+`src-tauri/capabilities/default.json`
+
+json
+
+```json
+
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "TubeDeck desktop application permissions",
+  "windows": ["main"],
+  "permissions": [
+    "core:default"
+  ]
+}
+```
+
+## 7. Entry point and package configuration
+
+`src/main.tsx`
+
+tsx
+
+```tsx
+
+import React from "react";
+import ReactDOM from "react-dom/client";
+import App from "./App";
+
+ReactDOM.createRoot(
+  document.getElementById("root")!
+).render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>
+);
+```
+
+`package.json`
+
+json
+
+```json
+
+{
+  "name": "tubedeck",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "tauri": "tauri"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2.0.0",
+    "lucide-react": "^0.468.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.0.0",
+    "@types/react": "^18.3.0",
+    "@types/react-dom": "^18.3.0",
+    "typescript": "~5.6.2",
+    "vite": "^6.0.0"
+  }
+}
+```
+
+`index.html`
+
+HTMLRegels laten teruglopenCode kopiërenVoorbeeld bekijken
+
+```html
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#171920" />
+    <title>TubeDeck</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+```
+
+## 8. Vite and TypeScript configuration
+
+`vite.config.ts`
+
+ts
+
+```ts
+
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
+
+export default defineConfig({
+  plugins: [react()],
+  clearScreen: false,
+  server: {
+    port: 1420,
+    strictPort: true,
+    host: "127.0.0.1"
+  }
+});
+```
+
+Add the React Vite plugin:
+
+powershell
+
+```powershell
+npm install -D @vitejs/plugin-react
+```
+
+`tsconfig.json`
+
+json
+
+```json
+
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "useDefineForClassFields": true,
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "skipLibCheck": true,
+    "moduleResolution": "Bundler",
+    "allowImportingTsExtensions": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "jsx": "react-jsx",
+    "strict": true
+  },
+  "include": ["src"]
+}
+```
+
+## 9. Install and run TubeDeck
+
+Install the Windows prerequisites:
+
+- Rust toolchain.
+- Node.js LTS.
+- Microsoft C++ Build Tools.
+- WebView2 Runtime.
+- yt-dlp.
+- FFmpeg.
+
+Make sure `yt-dlp.exe` and `ffmpeg.exe` are available through Windows PATH.
+
+Run:
+
+powershell
+
+```powershell
+
+npm install
+
+# Start development version
+npm run tauri dev
+
+# Build Windows installer
+npm run tauri build
+```
+
+The installer should be generated under:
+
+text
+
+```text
+src-tauri/target/release/bundle/
+```
+
+## 10. What remains before calling it production-ready
+
+I want to be transparent about the current source: it is a substantial starter implementation, not yet a finished, tested application.
+
+These are the next engineering tasks:
+
+| Feature | Current state |
+| --- | --- |
+| Main UI and styling | Implemented |
+| Command generation | Implemented for basic options |
+| Copy command | Implemented |
+| Preset selection | Basic examples |
+| Native yt-dlp launching | Implemented |
+| Concurrent job limiting | Basic backend semaphore |
+| Live progress updates | Needs integration |
+| Pause/resume individual jobs | Needs implementation |
+| Persistent queue and history | Needs SQLite |
+| Playlist item selection | Needs implementation |
+| Custom argument editor | Needs implementation |
+| Automatic yt-dlp updates | Needs implementation |
+| Installer testing | Needs Windows build testing |
+
+One important technical improvement before relying on it: the backend should use streaming process output rather than `Command::output()`, allowing it to update download progress continuously. It should also persist jobs and support cancellation and graceful shutdown.
+
+## Final vision
+
+# TubeDeck
+
+Windows desktop · yt-dlp powered
+
+Project design
+
+Kick Video Downloader - Kick Stream Replay MP4 Saver | DownForge
+
+Saas Settings designs, themes, templates and downloadable graphic elements on Dribbble
+
+Features – Codex app | OpenAI Developers
+
+The finished application should feel like a professional download manager, with the full flexibility of yt-dlp underneath.
+
+My recommendation for the next development milestone is to finish the actual download engine: real-time progress, individual pause/cancel, playlist inspection, and persistent queue storage. Those features will turn this from a good-looking frontend into a genuinely useful daily downloader.
