@@ -133,6 +133,7 @@ pub fn run() {
             commands::install_binary,
             commands::check_updates,
             commands::prepare_for_update,
+            commands::take_update_notice,
         ])
         .build(tauri::generate_context!())
         .expect("error while building TubeDeck");

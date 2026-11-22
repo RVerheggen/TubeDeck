@@ -387,6 +387,14 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .log-row .job-log { margin: 0; }
 .load-more { display: flex; justify-content: center; padding-top: 14px; }
 
+.app-version {
+  display: block; width: 100%; margin-top: 8px; padding: 2px 4px;
+  border: 0; background: none; color: var(--muted);
+  font-size: 10.5px; text-align: center; cursor: pointer;
+}
+.app-version:hover { color: var(--text); }
+@media (max-width: 920px) { .app-version { font-size: 9.5px; } }
+
 /* TubeDeck self-update */
 .update-notice {
   display: flex; align-items: center; gap: 10px;

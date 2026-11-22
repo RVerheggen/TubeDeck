@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { api, errorMessage, onEngineEvents, onJobEvents } from "../lib/api";
-import { appVersion, checkAppUpdate, installAppUpdate, type AppUpdateInfo } from "../lib/appUpdate";
+import { afterUpdate, appVersion, checkAppUpdate, installAppUpdate, type AppUpdateInfo } from "../lib/appUpdate";
 import type {
   Component,
   InstallProgress,
@@ -75,7 +75,8 @@ interface AppState {
   retryJob: (id: string) => Promise<void>;
   removeJob: (id: string) => Promise<void>;
   clearFinished: () => Promise<void>;
-  toast: (kind: Toast["kind"], message: string) => void;
+  /** Show a message; it disappears after `durationMs` (default 3.5 s, errors 7 s). */
+  toast: (kind: Toast["kind"], message: string, durationMs?: number) => void;
   dismissToast: (id: number) => void;
 }
 
@@ -159,6 +160,7 @@ export const useAppStore = create<AppState>((set, get) => {
         const [settings, presets, jobs] = await Promise.all([api.getSettings(), api.listPresets(), api.listJobs()]);
         set({ settings, presets, jobs, ready: true });
         void appVersion().then((v) => set({ appVersion: v }));
+        void afterUpdate().then((msg) => msg && get().toast("success", msg, 10_000));
         // Look for a TubeDeck update shortly after start, then every 6 hours.
         setTimeout(() => void get().checkAppUpdate(true), 5000);
         setInterval(() => void get().checkAppUpdate(true), 6 * 60 * 60 * 1000);
@@ -345,10 +347,10 @@ export const useAppStore = create<AppState>((set, get) => {
     removeJob: (id) => jobAction(() => api.removeJob(id)),
     clearFinished: () => jobAction(() => api.clearFinishedJobs()),
 
-    toast: (kind, message) => {
+    toast: (kind, message, durationMs) => {
       const id = ++toastSeq;
       set({ toasts: [...get().toasts, { id, kind, message }] });
-      setTimeout(() => get().dismissToast(id), kind === "error" ? 7000 : 3500);
+      setTimeout(() => get().dismissToast(id), durationMs ?? (kind === "error" ? 7000 : 3500));
     },
     dismissToast: (id) => set({ toasts: get().toasts.filter((t) => t.id !== id) }),
   };

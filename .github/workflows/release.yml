@@ -1,14 +1,17 @@
 name: Release
 
-# Push a tag like v0.1.0 (matching "version" in src-tauri/tauri.conf.json):
-#   1. the CI tests run (Linux),
-#   2. the Windows installers are built and signed for the updater,
-#   3. everything is attached to a DRAFT GitHub release, including latest.json.
-# Installed copies of TubeDeck only see the update once you publish the draft, because the
-# updater reads .../releases/latest/download/latest.json (drafts don't count as "latest").
+# Two ways to start a release of the version in src-tauri/tauri.conf.json:
+#   • Recommended: Actions → Release → Run workflow (on main). The tag is created for you,
+#     and the Rust build cache is saved under main, so the next release reuses it.
+#   • Or push a tag like v0.1.2. This works too, but GitHub scopes caches per tag, so every
+#     tag-started build compiles from scratch (~8–10 min).
+# Either way: the CI tests run (Linux), the Windows installers are built and signed for the
+# updater, and everything (including latest.json) goes into a DRAFT GitHub release.
+# Installed copies only see the update once you publish the draft.
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -35,16 +38,26 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri -> target
+          # Same cache for every release, whichever way it was started.
+          shared-key: release-windows
 
       - name: Install npm dependencies
         run: npm ci
 
-      - name: Check the tag matches the app version
+      - name: Check version and tag
         shell: pwsh
         run: |
           $version = (Get-Content src-tauri/tauri.conf.json | ConvertFrom-Json).version
-          if ("v$version" -ne "${{ github.ref_name }}") {
-            throw "Tag ${{ github.ref_name }} does not match tauri.conf.json version $version"
+          if ("${{ github.event_name }}" -eq "push") {
+            if ("v$version" -ne "${{ github.ref_name }}") {
+              throw "Tag ${{ github.ref_name }} does not match tauri.conf.json version $version"
+            }
+          } else {
+            if ("${{ github.ref }}" -ne "refs/heads/main") { throw "Run releases from main." }
+            git fetch --tags --quiet
+            if (git tag --list "v$version") {
+              throw "v$version is already released. Bump the version (tauri.conf.json, Cargo.toml, package.json) first."
+            }
           }
 
       - uses: tauri-apps/tauri-action@v0
@@ -55,12 +68,14 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
-          tagName: ${{ github.ref_name }}
-          releaseName: TubeDeck ${{ github.ref_name }}
+          # __VERSION__ is replaced with the version from tauri.conf.json; the tag is created
+          # on this commit if it doesn't exist yet.
+          tagName: v__VERSION__
+          releaseName: TubeDeck v__VERSION__
           releaseBody: |
             See CHANGELOG.md for what's new.
 
-            **New install:** download `TubeDeck_${{ github.ref_name }}_x64-setup.exe` (the `v` is not part of the file name) and run it. It installs for your user only and needs no administrator rights.
+            **New install:** download the `_x64-setup.exe` file below and run it. It installs for your user only and needs no administrator rights.
             The installer isn't code-signed, so Windows SmartScreen warns the first time: click **More info → Run anyway**.
 
             **Already installed:** TubeDeck shows "Update available" in the bottom-left corner. Click it to update.

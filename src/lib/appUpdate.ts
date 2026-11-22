@@ -16,6 +16,31 @@ export interface AppUpdateInfo {
 // The plugin's Update object holds a native resource; keep it out of the (serializable) store.
 let pending: import("@tauri-apps/plugin-updater").Update | null = null;
 
+/**
+ * After an update, TubeDeck is started by the installer in the background, and Windows
+ * opens it behind other windows. Returns the "updated" message (once) and brings the window
+ * to the front; returns null on a normal start.
+ */
+export async function afterUpdate(): Promise<string | null> {
+  if (!inDesktop) return null;
+  const message = await invoke<string | null>("take_update_notice");
+  if (!message) return null;
+  const { getCurrentWindow } = await import("@tauri-apps/api/window");
+  const win = getCurrentWindow();
+  try {
+    await win.unminimize();
+    await win.show();
+    // Windows refuses a plain focus request from a background-started app; briefly making
+    // the window topmost is the usual way to get it in front of the others.
+    await win.setAlwaysOnTop(true);
+    await win.setFocus();
+    setTimeout(() => void win.setAlwaysOnTop(false), 400);
+  } catch {
+    /* focusing is best effort */
+  }
+  return message;
+}
+
 export async function appVersion(): Promise<string> {
   if (!inDesktop) return "0.1.0";
   const { getVersion } = await import("@tauri-apps/api/app");

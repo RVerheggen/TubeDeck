@@ -25,6 +25,7 @@ export function Sidebar() {
   const presets = useAppStore((s) => s.presets);
   const theme = useAppStore((s) => s.settings?.theme ?? "system");
   const updateSettings = useAppStore((s) => s.updateSettings);
+  const appVersion = useAppStore((s) => s.appVersion);
 
   const activeCount = jobs.filter((j) => ACTIVE.has(j.status)).length;
 
@@ -78,6 +79,11 @@ export function Sidebar() {
         </button>
         <UpdateNotice />
         <EngineStatus />
+        {appVersion && (
+          <button className="app-version" onClick={() => setView("settings")} title="About TubeDeck">
+            TubeDeck v{appVersion}
+          </button>
+        )}
       </div>
     </aside>
   );

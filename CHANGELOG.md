@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.2 (unreleased)
+
+### Changed
+- TubeDeck's own version is shown in the bottom-left corner (click it for Settings → About).
+- After an update, TubeDeck comes to the front instead of opening behind other windows, and says which version it was updated to.
+
+### Releases
+- Releases can be started with Actions → Release → Run workflow on `main`; those builds reuse the Rust build cache.
+
 ## 0.1.1 (2026-11-22)
 
 ### Fixed

@@ -331,9 +331,45 @@ pub async fn startup_maintenance(app: AppHandle) {
 /// the normal exit path, so save the queue and logs now. Running downloads keep their
 /// running status and resume after the restart (same recovery as after a crash).
 #[tauri::command]
-pub fn prepare_for_update(engine: State<'_, Arc<Engine>>) {
+pub fn prepare_for_update(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    engine: State<'_, Arc<Engine>>,
+) {
     log::info!("Preparing to install a TubeDeck update");
+    // Leave a note so the next start can say "updated" and bring the window to the front:
+    // the installer starts TubeDeck from the background, and Windows then opens it behind
+    // other windows.
+    let marker = update_marker(&state);
+    if let Err(e) = std::fs::write(&marker, app.package_info().version.to_string()) {
+        log::warn!("Could not write {}: {e}", marker.display());
+    }
     engine.shutdown();
+}
+
+fn update_marker(state: &AppState) -> PathBuf {
+    let data = state
+        .managed_bin_dir
+        .parent()
+        .map(Path::to_path_buf)
+        .unwrap_or_default();
+    data.join("updated-from.txt")
+}
+
+/// After an update: "TubeDeck was updated from X to Y" (once), else None.
+#[tauri::command]
+pub fn take_update_notice(app: AppHandle, state: State<'_, AppState>) -> Option<String> {
+    let marker = update_marker(&state);
+    let old = std::fs::read_to_string(&marker).ok()?;
+    let _ = std::fs::remove_file(&marker);
+    let new = app.package_info().version.to_string();
+    let old = old.trim();
+    log::info!("Started after an update from {old} to {new}");
+    Some(if old == new || old.is_empty() {
+        format!("TubeDeck {new} is installed.")
+    } else {
+        format!("TubeDeck was updated from {old} to {new}.")
+    })
 }
 
 // ---- Playlists -------------------------------------------------------------------------
