@@ -12,6 +12,7 @@ import {
 import type { ReactNode } from "react";
 import { useAppStore } from "../store/useAppStore";
 import type { Theme, ViewId } from "../lib/types";
+import { UpdateNotice } from "./AppUpdate";
 import { EngineStatus } from "./EngineStatus";
 
 const ACTIVE = new Set(["queued", "starting", "downloading", "processing", "paused"]);
@@ -75,6 +76,7 @@ export function Sidebar() {
           {themeIcon}
           <span className="nav-text">Theme: {theme}</span>
         </button>
+        <UpdateNotice />
         <EngineStatus />
       </div>
     </aside>

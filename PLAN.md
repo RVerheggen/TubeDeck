@@ -316,9 +316,10 @@ Optional: generate TS types from Rust (`ts-rs` or `tauri-specta`) so `lib/types.
    - **Docs:** `docs/TESTING.md` (automated plus manual release checklist), `CHANGELOG.md`, and a restructured README.
    - **Not done (needs your input):** code signing (needs a certificate) and TubeDeck self-update via `tauri-plugin-updater` (needs an update-signing key stored as a GitHub secret). Both are listed under Open decisions.
 
-## Open decisions
-- ~~**Binary strategy.**~~ Decided and done (M6): managed download into app data with PATH fallback.
-- ~~**Cookies support.**~~ Done (M1): `--cookies-from-browser` in Configure → Advanced, suggested by the bot-check error hint.
-- **Distribution.** Personal use (unsigned is fine) or public (budget for a code-signing certificate, e.g. Azure Trusted Signing or an OV certificate)? Signing can then be added to the release workflow.
-- **TubeDeck self-update.** `tauri-plugin-updater` with update files on GitHub releases. Needs an update-signing key pair, with the private key stored as a GitHub Actions secret.
-- **First public version number.** The app is at 0.1.0. Tag `v0.1.0` to produce a draft release, or bump to 1.0.0 first.
+## Decisions after M7
+- **Code signing:** not used. TubeDeck is for personal use and friends, and SmartScreen's "More info → Run anyway" is accepted.
+- **CI:** manual-only on Linux, without clippy (run locally). It runs automatically as the first step of every release.
+- **TubeDeck self-update:** done with `tauri-plugin-updater` and a public repository, so installed copies can read `latest.json` from GitHub releases. The private signing key lives only in encrypted Actions secrets and in `%USERPROFILE%\.tubedeck-signing\`.
+  - Verified locally with two signed builds (0.1.0 → 0.1.1) and a local update server: the update was detected and shown bottom-left, a tampered signature was refused while TubeDeck kept working, and the real update installed without an admin prompt. TubeDeck relaunched as 0.1.1 with settings intact.
+- **Version:** first release is 0.1.0.
+- ~~Binary strategy~~ (M6) and ~~cookies support~~ (M1) were done earlier.

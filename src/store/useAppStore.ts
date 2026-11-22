@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { api, errorMessage, onEngineEvents, onJobEvents } from "../lib/api";
+import { appVersion, checkAppUpdate, installAppUpdate, type AppUpdateInfo } from "../lib/appUpdate";
 import type {
   Component,
   InstallProgress,
@@ -33,6 +34,13 @@ interface AppState {
   installs: Partial<Record<Component, InstallProgress>>;
   updates: UpdateInfo | null;
   checkingUpdates: boolean;
+  appVersion: string;
+  /** A newer TubeDeck release, if one was found. */
+  appUpdate: AppUpdateInfo | null;
+  appUpdatePhase: "idle" | "checking" | "downloading" | "installing" | "error" | "uptodate";
+  appUpdateProgress: number | null;
+  appUpdateError: string | null;
+  appUpdateDialog: boolean;
   jobs: Job[];
   toasts: Toast[];
 
@@ -50,6 +58,9 @@ interface AppState {
   openPicker: (urls: string[]) => void;
   install: (component: Component) => Promise<void>;
   checkUpdates: () => Promise<void>;
+  checkAppUpdate: (silent?: boolean) => Promise<void>;
+  installAppUpdate: () => Promise<void>;
+  setAppUpdateDialog: (open: boolean) => void;
   nextPicker: () => void;
   applyJobUpdates: (jobs: Job[]) => void;
   applyJobRemovals: (ids: string[]) => void;
@@ -115,6 +126,12 @@ export const useAppStore = create<AppState>((set, get) => {
     installs: {},
     updates: null,
     checkingUpdates: false,
+    appVersion: "",
+    appUpdate: null,
+    appUpdatePhase: "idle",
+    appUpdateProgress: null,
+    appUpdateError: null,
+    appUpdateDialog: false,
     jobs: [],
     toasts: [],
 
@@ -141,6 +158,10 @@ export const useAppStore = create<AppState>((set, get) => {
         });
         const [settings, presets, jobs] = await Promise.all([api.getSettings(), api.listPresets(), api.listJobs()]);
         set({ settings, presets, jobs, ready: true });
+        void appVersion().then((v) => set({ appVersion: v }));
+        // Look for a TubeDeck update shortly after start, then every 6 hours.
+        setTimeout(() => void get().checkAppUpdate(true), 5000);
+        setInterval(() => void get().checkAppUpdate(true), 6 * 60 * 60 * 1000);
         void get().refreshEngine();
       } catch (e) {
         set({ loadError: errorMessage(e), ready: true });
@@ -170,6 +191,31 @@ export const useAppStore = create<AppState>((set, get) => {
         set({ checkingUpdates: false });
       }
     },
+
+    checkAppUpdate: async (silent = false) => {
+      const phase = get().appUpdatePhase;
+      if (phase === "checking" || phase === "downloading" || phase === "installing") return;
+      set({ appUpdatePhase: "checking", appUpdateError: null });
+      try {
+        const appUpdate = await checkAppUpdate();
+        set({ appUpdate, appUpdatePhase: appUpdate ? "idle" : "uptodate" });
+      } catch (e) {
+        // Offline or no release published yet: stay quiet unless the user asked.
+        set({ appUpdatePhase: silent ? "idle" : "error", appUpdateError: errorMessage(e) });
+      }
+    },
+
+    installAppUpdate: async () => {
+      set({ appUpdatePhase: "downloading", appUpdateProgress: 0, appUpdateError: null });
+      try {
+        await installAppUpdate((p) => set({ appUpdateProgress: p, appUpdatePhase: p === 100 ? "installing" : "downloading" }));
+        set({ appUpdatePhase: "installing" });
+      } catch (e) {
+        set({ appUpdatePhase: "error", appUpdateError: errorMessage(e) });
+      }
+    },
+
+    setAppUpdateDialog: (appUpdateDialog) => set({ appUpdateDialog }),
 
     openPicker: (urls) => set({ pickerUrls: [...get().pickerUrls, ...urls] }),
     nextPicker: () => set({ pickerUrls: get().pickerUrls.slice(1) }),

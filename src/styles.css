@@ -387,6 +387,29 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .log-row .job-log { margin: 0; }
 .load-more { display: flex; justify-content: center; padding-top: 14px; }
 
+/* TubeDeck self-update */
+.update-notice {
+  display: flex; align-items: center; gap: 10px;
+  width: 100%; margin-top: 14px; padding: 11px 14px;
+  border: 1px solid var(--accent); border-radius: 10px;
+  background: var(--accent-soft); color: var(--text);
+  cursor: pointer; text-align: left;
+}
+.update-notice:hover { filter: brightness(1.08); }
+.update-notice > svg { color: var(--accent); flex: none; }
+.update-text-wrap strong { display: block; font-size: 12px; }
+.update-text-wrap small { display: block; color: var(--muted); font-size: 11px; margin-top: 2px; }
+.modal.update-modal { width: min(560px, 100%); padding: 0; overflow: hidden; }
+.update-body { padding: 16px 20px; display: grid; gap: 12px; }
+.release-notes {
+  margin: 0; max-height: 260px; overflow: auto;
+  white-space: pre-wrap; font-family: inherit; font-size: 12.5px; line-height: 1.6;
+  background: var(--panel2); border-radius: 8px; padding: 12px 14px;
+}
+.update-body .notice { margin: 0; }
+.about-version { color: var(--text); }
+@media (max-width: 920px) { .update-text-wrap { display: none; } .update-notice { justify-content: center; padding: 12px; } }
+
 /* Engine setup */
 .setup-panel { border-color: var(--border); }
 .setup-panel.required { border-color: var(--amber); box-shadow: inset 3px 0 var(--amber); }

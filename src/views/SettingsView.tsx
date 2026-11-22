@@ -1,4 +1,4 @@
-import { CloudDownload, Cpu, FolderOpen, Monitor, Moon, RefreshCw, Settings as SettingsIcon, Sun } from "lucide-react";
+import { ArrowUpCircle, CloudDownload, Cpu, FolderOpen, Info, Monitor, Moon, RefreshCw, Settings as SettingsIcon, Sun } from "lucide-react";
 import { useEffect, useState } from "react";
 import { api, inDesktop, pickFolder, revealInExplorer } from "../lib/api";
 import { formatBytes, formatTime } from "../lib/format";
@@ -74,6 +74,49 @@ function BinaryRow({
       />
       <small className="field-hint">{hint}</small>
     </div>
+  );
+}
+
+function AboutPanel() {
+  const version = useAppStore((s) => s.appVersion);
+  const update = useAppStore((s) => s.appUpdate);
+  const phase = useAppStore((s) => s.appUpdatePhase);
+  const error = useAppStore((s) => s.appUpdateError);
+  const check = useAppStore((s) => s.checkAppUpdate);
+  const openDialog = useAppStore((s) => s.setAppUpdateDialog);
+  const status =
+    phase === "checking"
+      ? "Checking…"
+      : update
+        ? `Version ${update.version} is available.`
+        : phase === "uptodate"
+          ? "You have the latest version."
+          : phase === "error"
+            ? `Couldn't check: ${error}`
+            : "TubeDeck checks for updates when it starts and every 6 hours.";
+  return (
+    <Panel
+      title="About TubeDeck"
+      icon={<Info size={17} />}
+      actions={
+        update ? (
+          <button className="primary-button" onClick={() => openDialog(true)}>
+            <ArrowUpCircle size={15} /> Update to {update.version}
+          </button>
+        ) : (
+          <button className="secondary-button" onClick={() => check(false)} disabled={phase === "checking"}>
+            <RefreshCw size={15} className={phase === "checking" ? "spin" : ""} /> Check for TubeDeck updates
+          </button>
+        )
+      }
+    >
+      <p>
+        <strong className="about-version">TubeDeck {version || "…"}</strong> · {status}
+      </p>
+      <p className="muted small">
+        Updates come from the project's GitHub releases and are verified with TubeDeck's signing key before they're installed.
+      </p>
+    </Panel>
   );
 }
 
@@ -236,6 +279,8 @@ export function SettingsView() {
         </div>
         <small className="field-hint">Path changes apply after Re-check.</small>
       </Panel>
+
+      <AboutPanel />
 
       {paths && inDesktop && (
         <Panel title="App data" actions={<ExportDiagnosticsButton />}>

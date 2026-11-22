@@ -25,3 +25,8 @@ dist-ssr
 
 # Claude Code local settings
 .claude/settings.local.json
+
+# Never commit signing keys (they live in %USERPROFILE%\.tubedeck-signing)
+*.key
+*.key.pub
+*.key.password.txt

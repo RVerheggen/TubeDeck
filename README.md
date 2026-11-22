@@ -67,7 +67,7 @@ npm test; npm run build
 cd src-tauri; cargo fmt --check; cargo clippy --all-targets -- -D warnings; cargo test
 ```
 
-CI runs the same checks on Windows for every push and pull request (`.github/workflows/ci.yml`). The manual release checklist is in [docs/TESTING.md](docs/TESTING.md).
+CI (`.github/workflows/ci.yml`) runs the frontend checks, rustfmt and the Rust tests on Linux. It runs automatically as the first step of every release; to run it any other time, use **Actions → CI → Run workflow** on GitHub. Clippy isn't part of CI; run it locally with `cargo clippy --all-targets -- -D warnings`. The manual release checklist is in [docs/TESTING.md](docs/TESTING.md).
 
 ## Build and release
 
@@ -75,7 +75,7 @@ CI runs the same checks on Windows for every push and pull request (`.github/wor
 npm run tauri build
 ```
 
-The installers are written to `src-tauri/target/release/bundle/nsis/` (`-setup.exe`, per-user) and `.../msi/`.
+The installers are written to `src-tauri/target/release/bundle/nsis/` (`-setup.exe`, per-user) and `.../msi/`. A local build without the signing key works but skips the updater signature.
 
 To publish a release:
 1. Bump `version` in `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml` and `package.json`, and update `CHANGELOG.md`.
@@ -85,7 +85,16 @@ To publish a release:
 git tag v0.1.0; git push origin v0.1.0
 ```
 
-3. `.github/workflows/release.yml` builds the installers and attaches them to a **draft** GitHub release. Review it and publish.
+3. `.github/workflows/release.yml` runs the CI tests, then builds and signs the installers. It attaches them and `latest.json` to a **draft** GitHub release.
+4. Review the draft and click **Publish**. Installed copies of TubeDeck then show "Update available" in the bottom-left corner within 6 hours, or right away on their next start. Nobody sees a draft.
+
+### App updates and the signing key
+
+TubeDeck updates itself through `tauri-plugin-updater`. It reads `latest.json` from the newest published release, downloads the installer, and installs it **only if its signature matches** the public key in `src-tauri/tauri.conf.json`. Then it restarts, and running downloads continue afterwards.
+
+- The **public key** is in `tauri.conf.json` and is meant to be public: it can only check signatures.
+- The **private key** and its password are stored as the encrypted repository secrets `TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` (Settings → Secrets and variables → Actions). They are not in the code or git history, can't be read back from GitHub, and aren't given to workflows from forks.
+- The original files are in `%USERPROFILE%\.tubedeck-signing\` on the developer machine. **Back up** `tubedeck.key` and `tubedeck.key.password.txt` (a password manager is ideal). If they're lost, existing installs can't accept future updates and everyone has to reinstall once by hand.
 
 ## Where things are stored
 

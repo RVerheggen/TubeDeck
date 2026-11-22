@@ -9,7 +9,7 @@
 | Frontend tests | `npm test` | formatting helpers, playlist URL detection and range parsing, queue grouping, option summaries |
 | Type-check + build | `npm run build` | TypeScript types (mirroring the Rust types) and the production bundle |
 
-CI (`.github/workflows/ci.yml`) runs all of these on Windows for every push to `main` and every pull request.
+CI (`.github/workflows/ci.yml`) runs everything except clippy on Linux: as the first step of every release, or by hand from the Actions tab.
 
 ## Browser preview
 
@@ -42,6 +42,11 @@ Run this on the installed build (`npm run tauri build`, then run the `-setup.exe
 - [ ] Quit while downloading → the dialog appears → Quit; on next start the download resumes from its partial file.
 - [ ] History keeps finished downloads across restarts; "Download again" works; delete works.
 - [ ] Settings, presets and theme survive a restart.
+
+**Updates** (needs two published releases, or a local update server as described in PLAN.md M7)
+- [ ] The older version shows "Update available" bottom-left; the dialog shows the new version and release notes.
+- [ ] "Update and restart" installs without an admin prompt and TubeDeck comes back on the new version, with settings and queue intact.
+- [ ] A release whose signature doesn't match is refused, and TubeDeck keeps working.
 
 **Misc**
 - [ ] Light and dark theme, and resizing down to 850 px wide.

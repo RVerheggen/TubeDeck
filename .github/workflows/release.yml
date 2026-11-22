@@ -1,7 +1,11 @@
 name: Release
 
-# Push a tag like v0.1.0 (matching "version" in src-tauri/tauri.conf.json) to build the
-# Windows installers and attach them to a draft GitHub release for review.
+# Push a tag like v0.1.0 (matching "version" in src-tauri/tauri.conf.json):
+#   1. the CI tests run (Linux),
+#   2. the Windows installers are built and signed for the updater,
+#   3. everything is attached to a DRAFT GitHub release, including latest.json.
+# Installed copies of TubeDeck only see the update once you publish the draft, because the
+# updater reads .../releases/latest/download/latest.json (drafts don't count as "latest").
 on:
   push:
     tags: ["v*"]
@@ -10,8 +14,12 @@ permissions:
   contents: write
 
 jobs:
+  test:
+    uses: ./.github/workflows/ci.yml
+
   build:
     name: Build Windows installers
+    needs: test
     runs-on: windows-latest
     timeout-minutes: 60
     steps:
@@ -42,14 +50,21 @@ jobs:
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Signs the installers so installed copies accept them as updates. The private key
+          # lives only in the repository's encrypted Actions secrets, never in the code.
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           tagName: ${{ github.ref_name }}
           releaseName: TubeDeck ${{ github.ref_name }}
           releaseBody: |
             See CHANGELOG.md for what's new.
 
-            The installers are not code-signed yet, so Windows SmartScreen shows a warning the
-            first time (More info → Run anyway). The NSIS installer (`-setup.exe`) installs per
-            user and needs no administrator rights.
+            **New install:** download `TubeDeck_${{ github.ref_name }}_x64-setup.exe` (the `v` is not part of the file name) and run it. It installs for your user only and needs no administrator rights.
+            The installer isn't code-signed, so Windows SmartScreen warns the first time: click **More info → Run anyway**.
+
+            **Already installed:** TubeDeck shows "Update available" in the bottom-left corner. Click it to update.
           releaseDraft: true
           prerelease: false
+          includeUpdaterJson: true
+          updaterJsonPreferNsis: true

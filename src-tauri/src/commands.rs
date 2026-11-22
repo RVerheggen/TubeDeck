@@ -327,6 +327,15 @@ pub async fn startup_maintenance(app: AppHandle) {
     }
 }
 
+/// Called right before installing a TubeDeck update: the installer closes the app without
+/// the normal exit path, so save the queue and logs now. Running downloads keep their
+/// running status and resume after the restart (same recovery as after a crash).
+#[tauri::command]
+pub fn prepare_for_update(engine: State<'_, Arc<Engine>>) {
+    log::info!("Preparing to install a TubeDeck update");
+    engine.shutdown();
+}
+
 // ---- Playlists -------------------------------------------------------------------------
 
 /// Inspect a URL: single video or playlist (with its entries). `token` lets the UI cancel.

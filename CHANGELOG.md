@@ -30,6 +30,9 @@ The first complete version of TubeDeck: a Windows download manager for yt-dlp.
 - yt-dlp updates itself daily (setting); stable or nightly channel.
 - Export diagnostics for bug reports (user folder redacted).
 
+### Updates
+- TubeDeck updates itself: "Update available" appears in the bottom-left corner when a new release is published. Updates are verified with TubeDeck's signing key before installing, and running downloads continue after the restart.
+- Settings → About TubeDeck shows the version and checks for updates on demand.
+
 ### Known limitations
 - The installer is not code-signed, so Windows SmartScreen warns on first run.
-- No automatic updates for TubeDeck itself yet (yt-dlp does update automatically).
