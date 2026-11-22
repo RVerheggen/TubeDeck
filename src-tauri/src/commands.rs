@@ -10,6 +10,7 @@ use crate::{
         probe::{self, ProbeResult, Probes},
         runner,
     },
+    installer::{self, Component, UpdateInfo},
     jsonfile,
     options::Browser,
     options::DownloadOptions,
@@ -18,10 +19,11 @@ use crate::{
 };
 use serde::Serialize;
 use std::{
+    collections::HashSet,
     path::{Path, PathBuf},
     sync::{Arc, Mutex},
 };
-use tauri::State;
+use tauri::{AppHandle, Emitter, Manager, State};
 
 pub const LOG_FILE_NAME: &str = "tubedeck";
 
@@ -196,6 +198,133 @@ pub fn clear_finished_jobs(engine: State<'_, Arc<Engine>>) -> CmdResult<()> {
 #[tauri::command]
 pub fn get_job_log(engine: State<'_, Arc<Engine>>, id: String) -> Vec<String> {
     engine.log(&id)
+}
+
+// ---- Managed binaries ------------------------------------------------------------------
+
+/// Components currently being installed (one install per component at a time).
+#[derive(Default)]
+pub struct Installs(Mutex<HashSet<Component>>);
+
+pub const EVENT_NOTICE: &str = "engine://notice";
+const DAY_MS: u64 = 24 * 60 * 60 * 1000;
+
+#[tauri::command]
+pub async fn install_binary(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    installs: State<'_, Installs>,
+    component: Component,
+) -> CmdResult<()> {
+    install_component(&app, &state, &installs, component).await
+}
+
+async fn install_component(
+    app: &AppHandle,
+    state: &AppState,
+    installs: &Installs,
+    component: Component,
+) -> CmdResult<()> {
+    if !installs.0.lock().unwrap().insert(component) {
+        return Err("Already installing".into());
+    }
+    let channel = state.settings.lock().unwrap().ytdlp_channel;
+    let bin = state.managed_bin_dir.clone();
+    let emitter = app.clone();
+    log::info!(
+        "Installing {component:?} ({channel:?}) into {}",
+        bin.display()
+    );
+    let result = installer::install(component, channel, &bin, |p| {
+        let _ = emitter.emit(installer::EVENT_INSTALL, p);
+    })
+    .await;
+    installs.0.lock().unwrap().remove(&component);
+    match &result {
+        Ok(()) => log::info!("Installed {component:?}"),
+        Err(e) => {
+            log::error!("Installing {component:?} failed: {e}");
+            let _ = app.emit(
+                installer::EVENT_INSTALL,
+                installer::InstallProgress {
+                    component,
+                    phase: "error",
+                    downloaded: 0,
+                    total: None,
+                    message: Some(e.clone()),
+                },
+            );
+        }
+    }
+    result
+}
+
+async fn current_status(state: &AppState) -> CmdResult<EngineStatus> {
+    let (y, f, d) = {
+        let s = state.settings.lock().unwrap();
+        (
+            s.ytdlp_path.clone(),
+            s.ffmpeg_path.clone(),
+            s.deno_path.clone(),
+        )
+    };
+    let dir = state.managed_bin_dir.clone();
+    tauri::async_runtime::spawn_blocking(move || binaries::engine_status(&y, &f, &d, &dir))
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn check_updates(state: State<'_, AppState>) -> CmdResult<UpdateInfo> {
+    let status = current_status(&state).await?;
+    let channel = state.settings.lock().unwrap().ytdlp_channel;
+    Ok(installer::check(&status, channel).await)
+}
+
+/// Runs once after startup: tidy the managed folder, and (at most daily) update the managed
+/// yt-dlp, since sites like YouTube break older versions within weeks.
+pub async fn startup_maintenance(app: AppHandle) {
+    let state = app.state::<AppState>();
+    installer::cleanup(&state.managed_bin_dir);
+    let (auto, last, channel) = {
+        let s = state.settings.lock().unwrap();
+        (s.auto_update, s.last_update_check, s.ytdlp_channel)
+    };
+    let now = crate::engine::job::now_ms();
+    if !auto || now.saturating_sub(last) < DAY_MS {
+        return;
+    }
+    let Ok(status) = current_status(&state).await else {
+        return;
+    };
+    if status.ytdlp.source != Some(binaries::Source::Managed) {
+        return; // only update copies TubeDeck installed
+    }
+    let info = installer::check(&status, channel).await;
+    if info.ytdlp.error.is_some() {
+        return; // offline: try again next start
+    }
+    {
+        let mut s = state.settings.lock().unwrap();
+        s.last_update_check = now;
+        if let Err(e) = state.db.save_settings(&s) {
+            log::warn!("{e}");
+        }
+    }
+    if info.ytdlp.update_available {
+        let latest = info.ytdlp.latest.clone().unwrap_or_default();
+        let installs = app.state::<Installs>();
+        let msg = match install_component(&app, &state, &installs, Component::Ytdlp).await {
+            Ok(()) => format!("yt-dlp was updated to {latest}."),
+            Err(e) => format!("yt-dlp update to {latest} failed: {e}"),
+        };
+        let _ = app.emit(EVENT_NOTICE, msg);
+    } else {
+        log::info!(
+            "yt-dlp {} is up to date",
+            info.ytdlp.installed.unwrap_or_default()
+        );
+    }
 }
 
 // ---- Playlists -------------------------------------------------------------------------

@@ -11,6 +11,14 @@ let jobs: Job[] = [];
 let archived: Job[] = [];
 let seq = 0;
 
+type EngineHandlers = { install: (p: import("./types").InstallProgress) => void; notice: (m: string) => void };
+const engineSubs = new Set<EngineHandlers>();
+const installed = new Set<string>();
+export function mockSubscribeEngine(h: EngineHandlers): () => void {
+  engineSubs.add(h);
+  return () => engineSubs.delete(h);
+}
+
 export function mockSubscribe(h: Handlers): () => void {
   subscribers.add(h);
   return () => subscribers.delete(h);
@@ -80,6 +88,9 @@ let settings: Settings = {
   maxConcurrent: 3,
   autoRetry: 3,
   resumeOnStartup: true,
+  ytdlpChannel: "stable",
+  autoUpdate: true,
+  lastUpdateCheck: 0,
   ytdlpPath: "",
   ffmpegPath: "",
   denoPath: "",
@@ -144,13 +155,30 @@ export async function mock<T>(cmd: string, args?: Record<string, unknown>): Prom
       presets = presets.filter((x) => x.id !== a.id);
       return r(undefined);
     case "engine_status": {
-      const missing = { found: false, path: null, source: null, version: null, ok: false, note: "Browser preview" };
-      return r({
-        ytdlp: { name: "yt-dlp", ...missing },
-        ffmpeg: { name: "FFmpeg", ...missing },
-        deno: { name: "Deno", ...missing },
-        managedDir: "",
-      });
+      const st = (name: string, id: string, version: string) =>
+        installed.has(id)
+          ? { name, found: true, path: "C:\\Users\\you\\AppData\\Local\\com.tubedeck.desktop\\bin\\" + id + ".exe", source: "managed", version, ok: true, note: null }
+          : { name, found: false, path: null, source: null, version: null, ok: false, note: "Not found" };
+      return r({ ytdlp: st("yt-dlp", "ytdlp", "2026.10.26"), ffmpeg: st("FFmpeg", "ffmpeg", "N-121000-gabc"), deno: st("Deno", "deno", "2.9.8"), managedDir: "" });
+    }
+    case "install_binary": {
+      const component = a.component as "ytdlp" | "ffmpeg" | "deno";
+      const total = { ytdlp: 23_600_000, ffmpeg: 91_000_000, deno: 42_900_000 }[component];
+      const send = (p: Partial<import("./types").InstallProgress>) =>
+        engineSubs.forEach((s) => s.install({ component, phase: "downloading", downloaded: 0, total, message: null, ...p }));
+      for (let d = 0; d < total; d += total / 12) {
+        send({ downloaded: d });
+        await new Promise((res) => setTimeout(res, 150));
+      }
+      send({ phase: "verifying", downloaded: total });
+      await new Promise((res) => setTimeout(res, 300));
+      installed.add(component);
+      send({ phase: "done", downloaded: total });
+      return r(undefined);
+    }
+    case "check_updates": {
+      const u = (id: string, inst: string, latest: string | null) => ({ installed: installed.has(id) ? inst : null, latest, managed: installed.has(id), updateAvailable: installed.has(id) && id === "ytdlp", error: null });
+      return r({ ytdlp: u("ytdlp", "2026.10.26", "2026.11.02"), deno: u("deno", "2.9.8", "2.9.8"), ffmpeg: u("ffmpeg", "N-121000-gabc", null), checkedAt: Date.now() });
     }
     case "read_app_log":
       return r({ path: "(browser preview)", lines: [] });

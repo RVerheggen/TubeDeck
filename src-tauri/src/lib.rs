@@ -4,6 +4,7 @@ mod commands;
 mod db;
 mod diagnostics;
 mod engine;
+mod installer;
 mod jsonfile;
 mod options;
 mod presets;
@@ -82,6 +83,7 @@ pub fn run() {
             let resume = state.settings.lock().unwrap().resume_on_startup;
             app.manage(state);
             app.manage(engine::probe::Probes::default());
+            app.manage(commands::Installs::default());
             let engine = Engine::new(
                 app.handle().clone(),
                 temp_root,
@@ -91,6 +93,8 @@ pub fn run() {
             );
             app.manage(engine.clone());
             engine.schedule();
+            let handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move { commands::startup_maintenance(handle).await });
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -124,6 +128,8 @@ pub fn run() {
             commands::probe_url,
             commands::cancel_probe,
             commands::enqueue_playlist,
+            commands::install_binary,
+            commands::check_updates,
         ])
         .build(tauri::generate_context!())
         .expect("error while building TubeDeck");

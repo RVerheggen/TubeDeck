@@ -7,9 +7,11 @@ import type {
   AppPaths,
   Browser,
   BuiltCommand,
+  Component,
   DownloadOptions,
   EngineStatus,
   HistoryPage,
+  InstallProgress,
   HistoryQuery,
   Job,
   ParsedUrl,
@@ -17,8 +19,9 @@ import type {
   Preset,
   ProbeResult,
   Settings,
+  UpdateInfo,
 } from "./types";
-import { mock, mockSubscribe } from "./mock";
+import { mock, mockSubscribe, mockSubscribeEngine } from "./mock";
 
 export const inDesktop = isTauri();
 
@@ -54,6 +57,9 @@ export const api = {
   clearFinishedJobs: () => call<void>("clear_finished_jobs"),
   getJobLog: (id: string) => call<string[]>("get_job_log", { id }),
 
+  installBinary: (component: Component) => call<void>("install_binary", { component }),
+  checkUpdates: () => call<UpdateInfo>("check_updates"),
+
   probeUrl: (url: string, token: string, cookiesFromBrowser: Browser | null) =>
     call<ProbeResult>("probe_url", { url, token, cookiesFromBrowser }),
   cancelProbe: (token: string) => call<void>("cancel_probe", { token }),
@@ -77,6 +83,20 @@ export async function exportDiagnostics(): Promise<string | null> {
   if (!path) return null;
   await invoke("export_diagnostics", { path });
   return path;
+}
+
+/** Install progress and notices (e.g. "yt-dlp was updated"). */
+export async function onEngineEvents(handlers: {
+  install: (p: InstallProgress) => void;
+  notice: (message: string) => void;
+}): Promise<() => void> {
+  if (!inDesktop) return mockSubscribeEngine(handlers);
+  const { listen } = await import("@tauri-apps/api/event");
+  const offs = await Promise.all([
+    listen<InstallProgress>("engine://install", (e) => handlers.install(e.payload)),
+    listen<string>("engine://notice", (e) => handlers.notice(e.payload)),
+  ]);
+  return () => offs.forEach((off) => off());
 }
 
 /** Subscribe to engine events. Returns an unsubscribe function. */

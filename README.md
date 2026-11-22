@@ -2,7 +2,7 @@
 
 A Windows desktop download manager for [yt-dlp](https://github.com/yt-dlp/yt-dlp), built with React + TypeScript, Tauri 2 and Rust.
 
-> **Status: milestones M0–M5 done.** Real downloads work, with live progress, pause/resume, cancel, automatic retry, reordering and a playlist picker. The queue, history, settings and per-download logs are saved in SQLite and survive restarts. See [PLAN.md](PLAN.md) for the roadmap.
+> **Status: milestones M0–M6 done.** Real downloads work, with live progress, pause/resume, cancel, automatic retry, reordering and a playlist picker. The queue, history, settings and per-download logs are saved in SQLite and survive restarts. yt-dlp, FFmpeg and Deno install with one click and yt-dlp keeps itself up to date. See [PLAN.md](PLAN.md) for the roadmap.
 
 ## Features (current)
 
@@ -19,7 +19,7 @@ A Windows desktop download manager for [yt-dlp](https://github.com/yt-dlp/yt-dlp
 - **Live command preview**: built by the same Rust function the engine will run (`src-tauri/src/args.rs`), shown as a copy-pasteable PowerShell command, with warnings for incompatible or dangerous options (e.g. `--exec`).
 - **Presets**: 5 built-ins plus your own (save, rename, overwrite, delete).
 - **Themes**: dark, light, or follow Windows. Fonts are bundled, so the app needs no network to render.
-- **Engine detection**: finds yt-dlp, FFmpeg and Deno (configured path → managed folder → PATH) and shows their versions.
+- **Engine setup and updates**: on a PC without yt-dlp, FFmpeg or Deno, the Downloads view offers to install them with one click (about 155 MB in total). Files come from the official GitHub releases and are refused unless they match the published SHA-256 checksums. Settings → Engine shows versions, checks for updates, and switches yt-dlp between stable and nightly. yt-dlp updates itself once a day (setting). Lookup order: configured path → TubeDeck's managed folder → PATH.
 - **Logs view**: the application log, with a filter.
 
 ## Prerequisites (Windows)
@@ -30,11 +30,8 @@ A Windows desktop download manager for [yt-dlp](https://github.com/yt-dlp/yt-dlp
 | Rust (stable, MSVC) | `winget install Rustlang.Rustup` |
 | Microsoft C++ Build Tools | Visual Studio Installer → "Desktop development with C++" |
 | WebView2 Runtime | Already included in Windows 11 |
-| yt-dlp | `yt-dlp.exe` from the [releases page](https://github.com/yt-dlp/yt-dlp/releases), on PATH or set in Settings |
-| FFmpeg | Needed for merging, audio conversion and embedding |
-| Deno 2.3+ | Needed for full YouTube support (yt-dlp's [EJS](https://github.com/yt-dlp/yt-dlp/wiki/EJS) challenge solver) |
 
-From M6 on, TubeDeck will download yt-dlp, FFmpeg and Deno for you.
+You don't need to install yt-dlp, FFmpeg or Deno yourself: TubeDeck offers to install them on first run. Copies you already have on PATH, or set in Settings, are used if no managed copy exists.
 
 ## Develop
 
@@ -69,7 +66,7 @@ Installers are written to `src-tauri/target/release/bundle/nsis/` and `.../msi/`
 |---|---|
 | Database (queue, history, settings, presets) | `%LOCALAPPDATA%\com.tubedeck.desktop\tubedeck.db` |
 | Application log / per-download logs | `%LOCALAPPDATA%\com.tubedeck.desktop\logs\tubedeck.log` / `logs\jobs\<id>.log` |
-| Managed binaries (put `yt-dlp.exe` / `deno.exe` here; auto-install in M6) | `%LOCALAPPDATA%\com.tubedeck.desktop\bin\` |
+| Managed binaries (`yt-dlp.exe`, `deno.exe`, `ffmpeg\`) | `%LOCALAPPDATA%\com.tubedeck.desktop\bin\` |
 | Partial downloads (kept for queued/paused jobs; removed on completion, cancel or removal) | `%LOCALAPPDATA%\com.tubedeck.desktop\tmp\` |
 
 ## Project layout
@@ -86,6 +83,7 @@ src-tauri/src/
   presets.rs, settings.rs
   db.rs                  SQLite: jobs (queue + history), settings, presets, migrations
   diagnostics.rs         text report for bug reports (profile path redacted)
+  installer.rs           download + SHA-256 verify + install yt-dlp/FFmpeg/Deno, update checks
   jsonfile.rs            one-time import of the pre-M4 JSON files
   binaries.rs            locate yt-dlp / FFmpeg / Deno, read versions
   commands.rs            Tauri commands

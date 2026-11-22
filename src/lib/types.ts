@@ -43,6 +43,9 @@ export interface Settings {
   maxConcurrent: number;
   autoRetry: number;
   resumeOnStartup: boolean;
+  ytdlpChannel: Channel;
+  autoUpdate: boolean;
+  lastUpdateCheck: number;
   ytdlpPath: string;
   ffmpegPath: string;
   denoPath: string;
@@ -94,6 +97,34 @@ export interface EngineStatus {
   ffmpeg: BinaryStatus;
   deno: BinaryStatus;
   managedDir: string;
+}
+
+// ---- Managed binaries -----------------------------------------------------------------
+
+export type Component = "ytdlp" | "ffmpeg" | "deno";
+export type Channel = "stable" | "nightly";
+
+export interface InstallProgress {
+  component: Component;
+  phase: "downloading" | "verifying" | "installing" | "done" | "error";
+  downloaded: number;
+  total: number | null;
+  message: string | null;
+}
+
+export interface ComponentUpdate {
+  installed: string | null;
+  latest: string | null;
+  managed: boolean;
+  updateAvailable: boolean;
+  error: string | null;
+}
+
+export interface UpdateInfo {
+  ytdlp: ComponentUpdate;
+  deno: ComponentUpdate;
+  ffmpeg: ComponentUpdate;
+  checkedAt: number;
 }
 
 export interface AppLog {

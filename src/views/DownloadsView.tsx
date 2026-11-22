@@ -1,9 +1,10 @@
 import { useState } from "react";
-import { ListVideo, Pause, Play, Trash2, TriangleAlert } from "lucide-react";
+import { ListVideo, Pause, Play, Trash2 } from "lucide-react";
 import { AddUrlPanel } from "../components/AddUrlPanel";
 import { CommandPreview } from "../components/CommandPreview";
 import { DownloadCard } from "../components/DownloadCard";
 import { GroupCard } from "../components/GroupCard";
+import { SetupPanel } from "../components/SetupPanel";
 import { StatsGrid } from "../components/StatsGrid";
 import { EmptyState, Panel } from "../components/ui";
 import type { Job } from "../lib/types";
@@ -38,9 +39,7 @@ export function DownloadsView() {
   const jobs = useAppStore((s) => s.jobs);
   const clearFinished = useAppStore((s) => s.clearFinished);
   const hasFinished = jobs.some((j) => ["completed", "failed", "canceled"].includes(j.status));
-  const engine = useAppStore((s) => s.engine);
   const maxConcurrent = useAppStore((s) => s.settings!.maxConcurrent);
-  const setView = useAppStore((s) => s.setView);
   const pauseAll = useAppStore((s) => s.pauseAll);
   const resumeAll = useAppStore((s) => s.resumeAll);
   const hasPaused = jobs.some((j) => j.status === "paused");
@@ -48,18 +47,7 @@ export function DownloadsView() {
 
   return (
     <>
-      {engine && !engine.ytdlp.ok && (
-        <div className="notice warn">
-          <TriangleAlert size={16} />
-          <span>
-            yt-dlp was not found, so downloads will fail. Install it or set its path in{" "}
-            <button className="link-button" onClick={() => setView("settings")}>
-              Settings → Engine
-            </button>
-            .
-          </span>
-        </div>
-      )}
+      <SetupPanel />
       <AddUrlPanel />
       <StatsGrid />
       <div className="two-col">

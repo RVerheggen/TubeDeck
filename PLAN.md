@@ -301,7 +301,14 @@ Optional: generate TS types from Rust (`ts-rs` or `tauri-specta`) so `lib/types.
    - **Picker:** filter, ranges ("1-10, 15, 20-"), shift-click, nested playlists opened in place (a channel's Playlists tab), "Only the linked video" for `watch?v=…&list=…` URLs, and a fallback to a single download when probing fails.
    - **Items:** each becomes its own job with title and thumbnail from the probe, grouped under one collapsible header with group pause/resume/cancel. Files go to `<Playlist title>/NN - <template>`, and the folder name is made safe for Windows.
    - **Verified against real YouTube:** playlist, watch+list, single video, nested playlists, a deleted playlist's error, cancel (no process left), and two items downloaded into `Blender Studio Logs\26 - …` and `31 - …`.
-7. **M6. Binaries.** First-run setup, managed downloads, yt-dlp updates, error classification (B6, B8).
+7. ✅ **M6. Binaries.** First-run setup, managed downloads, yt-dlp updates, error classification (B6, B8; B8 was already done in M3).
+   - **Downloads:** taken only from the official GitHub releases over HTTPS and refused unless they match the published SHA-256 file (sha256sum format for yt-dlp and FFmpeg, PowerShell format for Deno).
+   - **Install by rename:** files are swapped in by rename, so a running yt-dlp keeps working; leftovers are cleaned at startup.
+   - **FFmpeg:** uses the `gpl-shared` build (91 MB instead of 202 MB), installed with its DLLs in `bin\ffmpeg\`.
+   - **Update checks:** read the `/releases/latest` redirect, so no API token or rate limit. There are stable and nightly yt-dlp channels, and switching back to stable counts as an update.
+   - **Daily auto-update:** updates the managed yt-dlp at startup (setting, default on).
+   - **Found during E2E testing and fixed:** a transient "error sending request" when three downloads started at once, now retried with backoff and reported with the full error chain; and a staging folder left behind.
+   - **Verified on a simulated clean machine** (no yt-dlp or Deno): one-click install of all three in about 5 s; managed copies take precedence over PATH; a real download used them; stable → nightly → stable worked; the startup auto-update replaced nightly with stable 2 s after launch.
 8. **M7. Release.** Tests, CI, installer testing, signing, README (Part C, A7).
 
 ## Open decisions

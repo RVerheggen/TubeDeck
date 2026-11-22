@@ -1,23 +1,39 @@
-import { Cpu, FolderOpen, Monitor, Moon, RefreshCw, Settings as SettingsIcon, Sun } from "lucide-react";
+import { CloudDownload, Cpu, FolderOpen, Monitor, Moon, RefreshCw, Settings as SettingsIcon, Sun } from "lucide-react";
 import { useEffect, useState } from "react";
 import { api, inDesktop, pickFolder, revealInExplorer } from "../lib/api";
-import type { AppPaths, BinaryStatus, Settings } from "../lib/types";
+import { formatBytes, formatTime } from "../lib/format";
+import type { AppPaths, BinaryStatus, Component, ComponentUpdate, Settings } from "../lib/types";
+import { COMPONENTS, InstallButton, InstallStatus } from "../components/SetupPanel";
 import { ExportDiagnosticsButton } from "../components/LogViewer";
 import { Field, Panel, Segmented, Toggle } from "../components/ui";
 import { useAppStore } from "../store/useAppStore";
 
 function BinaryRow({
+  id,
   status,
+  update,
   value,
   onChange,
   hint,
 }: {
+  id: Component;
   status: BinaryStatus | undefined;
+  update: ComponentUpdate | undefined;
   value: string;
   onChange: (v: string) => void;
   hint: string;
 }) {
+  const progress = useAppStore((s) => s.installs[id]);
   const state = !status ? "unknown" : status.ok ? "ok" : status.found ? "degraded" : "missing";
+  const managed = status?.source === "managed";
+  const size = COMPONENTS.find((c) => c.id === id)!.size;
+  const action = !managed
+    ? status?.ok
+      ? `Install managed copy (${formatBytes(size)})`
+      : `Install (${formatBytes(size)})`
+    : update?.updateAvailable
+      ? `Update to ${update.latest}`
+      : "Reinstall";
   return (
     <div className="binary-row">
       <div className="binary-head">
@@ -30,6 +46,25 @@ function BinaryRow({
       </div>
       {status?.path && <code className="binary-path">{status.path}</code>}
       {status?.ok === false && status.found && status.note && <small className="error-text">{status.note}</small>}
+      {update && (
+        <small className={update.updateAvailable ? "update-text" : "muted"}>
+          {update.error
+            ? `Couldn't check: ${update.error}`
+            : update.latest
+              ? update.updateAvailable
+                ? `Update available: ${update.latest}`
+                : managed
+                  ? `Up to date (latest ${update.latest})`
+                  : `Latest is ${update.latest}${status?.source === "path" ? "; this copy is managed outside TubeDeck" : ""}`
+              : id === "ffmpeg"
+                ? "Rolling build; reinstall to get the newest"
+                : ""}
+        </small>
+      )}
+      {progress && progress.phase !== "done" ? <InstallStatus progress={progress} /> : null}
+      <div className="binary-actions">
+        <InstallButton id={id} label={action} primary={!status?.ok || !!update?.updateAvailable} />
+      </div>
       <input
         value={value}
         onChange={(e) => onChange(e.target.value)}
@@ -49,6 +84,9 @@ export function SettingsView() {
   const loading = useAppStore((s) => s.engineLoading);
   const refreshEngine = useAppStore((s) => s.refreshEngine);
   const toast = useAppStore((s) => s.toast);
+  const updates = useAppStore((s) => s.updates);
+  const checking = useAppStore((s) => s.checkingUpdates);
+  const checkUpdates = useAppStore((s) => s.checkUpdates);
   const [paths, setPaths] = useState<AppPaths | null>(null);
 
   useEffect(() => {
@@ -127,9 +165,14 @@ export function SettingsView() {
         title="Engine"
         icon={<Cpu size={17} />}
         actions={
-          <button className="secondary-button" onClick={() => refreshEngine()} disabled={loading}>
-            <RefreshCw size={15} className={loading ? "spin" : ""} /> Re-check
-          </button>
+          <>
+            <button className="secondary-button" onClick={() => checkUpdates()} disabled={checking}>
+              <CloudDownload size={15} className={checking ? "spin" : ""} /> Check for updates
+            </button>
+            <button className="secondary-button" onClick={() => refreshEngine()} disabled={loading}>
+              <RefreshCw size={15} className={loading ? "spin" : ""} /> Re-check
+            </button>
+          </>
         }
       >
         <p className="muted">
@@ -140,23 +183,52 @@ export function SettingsView() {
               (<code>{engine.managedDir}</code>)
             </>
           ) : null}
-          , then your PATH. One-click install and updates arrive in milestone M6.
+          , then your PATH. Managed copies come from the official GitHub releases and are checked against their published
+          SHA-256 checksums.
         </p>
+        <div className="config-grid engine-options">
+          <Field label="yt-dlp release channel" hint="Nightly gets site fixes sooner; stable is tested longer.">
+            <Segmented
+              label="yt-dlp release channel"
+              value={settings.ytdlpChannel}
+              onChange={(ytdlpChannel) => update({ ytdlpChannel })}
+              options={[
+                { value: "stable", label: "Stable" },
+                { value: "nightly", label: "Nightly" },
+              ]}
+            />
+          </Field>
+          <div className="field">
+            <Toggle
+              label="Keep yt-dlp up to date automatically"
+              hint="Checks once a day at startup and updates the managed copy. Sites like YouTube break old versions quickly."
+              checked={settings.autoUpdate}
+              onChange={(autoUpdate) => update({ autoUpdate })}
+            />
+            {settings.lastUpdateCheck > 0 && <small className="field-hint">Last automatic check: {formatTime(settings.lastUpdateCheck)}</small>}
+          </div>
+        </div>
         <div className="binary-grid">
           <BinaryRow
+            id="ytdlp"
             status={engine?.ytdlp}
+            update={updates?.ytdlp}
             value={settings.ytdlpPath}
             onChange={setPath("ytdlpPath")}
             hint="Required. Official yt-dlp.exe from github.com/yt-dlp/yt-dlp/releases."
           />
           <BinaryRow
+            id="ffmpeg"
             status={engine?.ffmpeg}
+            update={updates?.ffmpeg}
             value={settings.ffmpegPath}
             onChange={setPath("ffmpegPath")}
             hint="Needed to merge video + audio, convert audio and embed thumbnails."
           />
           <BinaryRow
+            id="deno"
             status={engine?.deno}
+            update={updates?.deno}
             value={settings.denoPath}
             onChange={setPath("denoPath")}
             hint="Deno 2.3+ is needed for full YouTube support (yt-dlp's JavaScript challenge solver)."

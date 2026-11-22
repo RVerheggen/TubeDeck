@@ -81,9 +81,16 @@ pub fn resolve(spec: &Spec, configured: &str, managed_dir: &Path) -> Option<(Pat
         // An explicit path that doesn't exist is reported, not silently replaced.
         return Some((p, Source::Configured));
     }
-    let managed = managed_dir.join(spec.exe);
-    if managed.is_file() {
-        return Some((managed, Source::Managed));
+    // FFmpeg is installed with its DLLs in `bin\ffmpeg\`; the others directly in `bin\`.
+    for managed in [
+        managed_dir.join(spec.exe),
+        managed_dir
+            .join(spec.exe.trim_end_matches(".exe"))
+            .join(spec.exe),
+    ] {
+        if managed.is_file() {
+            return Some((managed, Source::Managed));
+        }
     }
     let path_var = std::env::var_os("PATH")?;
     std::env::split_paths(&path_var)

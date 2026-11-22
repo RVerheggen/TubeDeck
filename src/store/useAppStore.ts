@@ -1,6 +1,9 @@
 import { create } from "zustand";
-import { api, errorMessage, onJobEvents } from "../lib/api";
+import { api, errorMessage, onEngineEvents, onJobEvents } from "../lib/api";
 import type {
+  Component,
+  InstallProgress,
+  UpdateInfo,
   DownloadOptions,
   EngineStatus,
   Job,
@@ -26,6 +29,10 @@ interface AppState {
   urlDraft: string;
   /** URLs waiting for the playlist picker; the first one is shown. */
   pickerUrls: string[];
+  /** Latest progress per component being (or just) installed. */
+  installs: Partial<Record<Component, InstallProgress>>;
+  updates: UpdateInfo | null;
+  checkingUpdates: boolean;
   jobs: Job[];
   toasts: Toast[];
 
@@ -41,6 +48,8 @@ interface AppState {
   refreshEngine: () => Promise<void>;
   enqueue: (urls: string[], overrides?: Partial<DownloadOptions>) => Promise<void>;
   openPicker: (urls: string[]) => void;
+  install: (component: Component) => Promise<void>;
+  checkUpdates: () => Promise<void>;
   nextPicker: () => void;
   applyJobUpdates: (jobs: Job[]) => void;
   applyJobRemovals: (ids: string[]) => void;
@@ -103,6 +112,9 @@ export const useAppStore = create<AppState>((set, get) => {
     engineLoading: false,
     urlDraft: "",
     pickerUrls: [],
+    installs: {},
+    updates: null,
+    checkingUpdates: false,
     jobs: [],
     toasts: [],
 
@@ -117,6 +129,16 @@ export const useAppStore = create<AppState>((set, get) => {
           removed: (ids) => get().applyJobRemovals(ids),
           order: (ids) => get().applyJobOrder(ids),
         });
+        await onEngineEvents({
+          install: (p) => {
+            set({ installs: { ...get().installs, [p.component]: p } });
+            if (p.phase === "done") {
+              void get().refreshEngine();
+              if (get().updates) void get().checkUpdates();
+            }
+          },
+          notice: (message) => get().toast(message.includes("failed") ? "error" : "success", message),
+        });
         const [settings, presets, jobs] = await Promise.all([api.getSettings(), api.listPresets(), api.listJobs()]);
         set({ settings, presets, jobs, ready: true });
         void get().refreshEngine();
@@ -127,6 +149,28 @@ export const useAppStore = create<AppState>((set, get) => {
 
     setView: (view) => set({ view }),
     setUrlDraft: (urlDraft) => set({ urlDraft }),
+    install: async (component) => {
+      set({ installs: { ...get().installs, [component]: { component, phase: "downloading", downloaded: 0, total: null, message: null } } });
+      try {
+        await api.installBinary(component);
+      } catch (e) {
+        const msg = errorMessage(e);
+        set({ installs: { ...get().installs, [component]: { component, phase: "error", downloaded: 0, total: null, message: msg } } });
+        get().toast("error", msg);
+      }
+    },
+
+    checkUpdates: async () => {
+      set({ checkingUpdates: true });
+      try {
+        set({ updates: await api.checkUpdates() });
+      } catch (e) {
+        get().toast("error", `Update check failed: ${errorMessage(e)}`);
+      } finally {
+        set({ checkingUpdates: false });
+      }
+    },
+
     openPicker: (urls) => set({ pickerUrls: [...get().pickerUrls, ...urls] }),
     nextPicker: () => set({ pickerUrls: get().pickerUrls.slice(1) }),
 
