@@ -2,6 +2,7 @@ import { useEffect, type ReactNode } from "react";
 import { CloseGuard } from "./components/CloseGuard";
 import { HistoryTable } from "./components/HistoryTable";
 import { LogViewer } from "./components/LogViewer";
+import { PlaylistPicker } from "./components/PlaylistPicker";
 import { PresetList } from "./components/PresetList";
 import { Sidebar } from "./components/Sidebar";
 import { Toasts } from "./components/Toasts";
@@ -78,6 +79,7 @@ export default function App() {
       </main>
       <Toasts />
       <CloseGuard />
+      <PlaylistPicker />
     </div>
   );
 }

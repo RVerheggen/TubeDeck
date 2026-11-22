@@ -64,6 +64,23 @@ pub struct Job {
     pub attempts: u32,
     /// When a queued job is waiting for an automatic retry (ms since epoch).
     pub retry_at: Option<u64>,
+    /// Set when the job is one item of a playlist added through the picker.
+    #[serde(default)]
+    pub group: Option<JobGroup>,
+}
+
+/// Playlist membership of a job.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct JobGroup {
+    /// Unique per "add" so the same playlist added twice forms two groups.
+    pub id: String,
+    pub playlist_id: Option<String>,
+    pub title: String,
+    /// 1-based position in the playlist.
+    pub index: u64,
+    /// Number of items in the playlist (not just the selected ones).
+    pub count: u64,
 }
 
 impl Job {
@@ -92,6 +109,7 @@ impl Job {
             error_hint: None,
             attempts: 0,
             retry_at: None,
+            group: None,
         }
     }
 

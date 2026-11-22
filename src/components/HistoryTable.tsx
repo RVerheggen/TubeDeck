@@ -133,6 +133,7 @@ export function HistoryTable() {
                       </span>
                       <span className="title-text">
                         {j.title ?? shortUrl(j.url)}
+                        {j.group && <small className="muted">{j.group.title} · {j.group.index}/{j.group.count}</small>}
                         {j.error && <small className="error-text">{j.error}</small>}
                       </span>
                     </td>

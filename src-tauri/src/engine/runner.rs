@@ -7,7 +7,12 @@ use super::{
     winjob::ProcessTree,
 };
 use crate::{args, binaries, commands::AppState};
-use std::{collections::VecDeque, path::Path, process::Stdio, sync::Arc};
+use std::{
+    collections::VecDeque,
+    path::{Path, PathBuf},
+    process::Stdio,
+    sync::Arc,
+};
 use tauri::Manager;
 use tokio::{
     io::{AsyncBufReadExt, AsyncRead, BufReader},
@@ -62,29 +67,78 @@ struct Prepared {
     warnings: Vec<String>,
 }
 
-fn prepare(engine: &Engine, id: &str) -> Result<Prepared, String> {
-    let job = engine.job(id).ok_or("Job disappeared")?;
-    let state = engine.app.state::<AppState>();
-    let (folder, y_cfg, f_cfg, d_cfg) = {
+/// Resolved programs for running yt-dlp.
+pub(crate) struct Tools {
+    pub ytdlp: PathBuf,
+    pub ffmpeg: Option<PathBuf>,
+    pub deno: Option<PathBuf>,
+}
+
+/// Find yt-dlp (required), FFmpeg and Deno using the configured paths, the managed folder
+/// and PATH (see `binaries::resolve`).
+pub(crate) fn tools(state: &AppState) -> Result<Tools, String> {
+    let (y_cfg, f_cfg, d_cfg) = {
         let s = state.settings.lock().unwrap();
         (
-            s.download_folder.clone(),
             s.ytdlp_path.clone(),
             s.ffmpeg_path.clone(),
             s.deno_path.clone(),
         )
     };
     let bin = &state.managed_bin_dir;
+    let found = |spec, cfg: &str| {
+        binaries::resolve(spec, cfg, bin)
+            .map(|(p, _)| p)
+            .filter(|p| p.is_file())
+    };
+    Ok(Tools {
+        ytdlp: found(&binaries::YTDLP, &y_cfg)
+            .ok_or("yt-dlp was not found. Install it or set its path in Settings → Engine.")?,
+        ffmpeg: found(&binaries::FFMPEG, &f_cfg),
+        deno: found(&binaries::DENO, &d_cfg),
+    })
+}
 
-    let (program, _) = binaries::resolve(&binaries::YTDLP, &y_cfg, bin)
-        .filter(|(p, _)| p.is_file())
-        .ok_or("yt-dlp was not found. Install it or set its path in Settings → Engine.")?;
-    let ffmpeg = binaries::resolve(&binaries::FFMPEG, &f_cfg, bin)
-        .map(|(p, _)| p)
-        .filter(|p| p.is_file());
-    let deno = binaries::resolve(&binaries::DENO, &d_cfg, bin)
-        .map(|(p, _)| p)
-        .filter(|p| p.is_file());
+/// A tokio command for yt-dlp: UTF-8 output, no console window, piped output.
+pub(crate) fn command(program: &Path, args: &[String]) -> Command {
+    let mut cmd = Command::new(program);
+    cmd.args(args)
+        .env("PYTHONIOENCODING", "utf-8")
+        .env("PYTHONUTF8", "1")
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .kill_on_drop(true);
+    #[cfg(windows)]
+    cmd.creation_flags(binaries::CREATE_NO_WINDOW);
+    cmd
+}
+
+/// Put a spawned child (and everything it starts) in a kill-on-close Job Object.
+pub(crate) fn adopt_tree(child: &tokio::process::Child) -> Option<ProcessTree> {
+    #[cfg(windows)]
+    {
+        let handle = child.raw_handle()?;
+        ProcessTree::adopt(handle)
+            .map_err(|e| log::warn!("Could not create job object: {e}"))
+            .ok()
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = child;
+        ProcessTree::adopt(std::ptr::null_mut()).ok()
+    }
+}
+
+fn prepare(engine: &Engine, id: &str) -> Result<Prepared, String> {
+    let job = engine.job(id).ok_or("Job disappeared")?;
+    let state = engine.app.state::<AppState>();
+    let folder = state.settings.lock().unwrap().download_folder.clone();
+    let Tools {
+        ytdlp: program,
+        ffmpeg,
+        deno,
+    } = tools(&state)?;
 
     let temp_dir = engine.temp_dir(id);
     std::fs::create_dir_all(&temp_dir).map_err(|e| format!("Could not create temp folder: {e}"))?;
@@ -138,18 +192,7 @@ pub async fn run(engine: Arc<Engine>, id: String) {
         engine.push_log(&id, w.clone());
     }
 
-    let mut cmd = Command::new(&prepared.program);
-    cmd.args(&prepared.args)
-        .env("PYTHONIOENCODING", "utf-8")
-        .env("PYTHONUTF8", "1")
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .kill_on_drop(true);
-    #[cfg(windows)]
-    cmd.creation_flags(binaries::CREATE_NO_WINDOW);
-
-    let mut child = match cmd.spawn() {
+    let mut child = match command(&prepared.program, &prepared.args).spawn() {
         Ok(c) => c,
         Err(e) => {
             let msg = format!("Could not start yt-dlp: {e}");
@@ -168,20 +211,8 @@ pub async fn run(engine: Arc<Engine>, id: String) {
     };
     log::info!("Job {id} started (pid {:?})", child.id());
 
-    #[cfg(windows)]
-    {
-        if let Some(handle) = child.raw_handle() {
-            match ProcessTree::adopt(handle) {
-                Ok(tree) => engine.attach_tree(&id, Arc::new(tree)),
-                Err(e) => log::warn!("Job {id}: could not create job object: {e}"),
-            }
-        }
-    }
-    #[cfg(not(windows))]
-    {
-        if let Ok(tree) = ProcessTree::adopt(std::ptr::null_mut()) {
-            engine.attach_tree(&id, Arc::new(tree));
-        }
+    if let Some(tree) = adopt_tree(&child) {
+        engine.attach_tree(&id, Arc::new(tree));
     }
 
     engine.update(&id, |job| {

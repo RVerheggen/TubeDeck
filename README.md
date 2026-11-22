@@ -2,7 +2,7 @@
 
 A Windows desktop download manager for [yt-dlp](https://github.com/yt-dlp/yt-dlp), built with React + TypeScript, Tauri 2 and Rust.
 
-> **Status: milestones M0–M4 done.** Real downloads work, with live progress, pause/resume, cancel, automatic retry and reordering. The queue, history, settings and per-download logs are saved in SQLite and survive restarts. See [PLAN.md](PLAN.md) for the roadmap.
+> **Status: milestones M0–M5 done.** Real downloads work, with live progress, pause/resume, cancel, automatic retry, reordering and a playlist picker. The queue, history, settings and per-download logs are saved in SQLite and survive restarts. See [PLAN.md](PLAN.md) for the roadmap.
 
 ## Features (current)
 
@@ -12,6 +12,7 @@ A Windows desktop download manager for [yt-dlp](https://github.com/yt-dlp/yt-dlp
 - **Reordering**: drag queued or paused downloads to change which one starts next.
 - **Saved between sessions**: the queue, settings and presets survive restarts. Downloads that were running when you quit resume automatically (a setting) and continue from their partial files. Closing the window while downloading asks first.
 - **History**: every finished, failed or canceled download, with search, a status filter, open folder, download again, per-download log and delete. "Clear finished" in the queue moves jobs here.
+- **Playlists**: playlist and channel URLs open a picker listing every item (thumbnail, title, duration). Choose items with a filter, ranges like `1-10, 15, 20-`, or shift+click, and open nested playlists. Each item becomes its own download, grouped under a collapsible playlist header, and is saved as `<Playlist>\NN - <title>`. "Pick items…" inspects any URL first.
 - **Export diagnostics** (Logs or Settings): a text report with versions, settings and recent logs for bug reports, with your user folder replaced by `%USERPROFILE%`.
 - **Downloads view**: paste one or more URLs (Ctrl+Enter to add), cards with thumbnails, stats, and a live command preview.
 - **Configure view**: video or audio mode, quality cap, container, preferred codec, audio format and quality, subtitles, SponsorBlock, embedding toggles, output folder and filename template, fragments, retries, rate limit, browser cookies, and free-form custom arguments.
@@ -91,6 +92,7 @@ src-tauri/src/
   engine/
     mod.rs               queue, scheduler, pause/resume/cancel/retry, reorder, batched events
     errors.rs            classify yt-dlp failures, hints, auto-retry backoff
+    probe.rs             inspect URLs (yt-dlp -J --flat-playlist), playlist folder/numbering
     job.rs               Job model and queue ordering
     runner.rs            spawn yt-dlp, merge stdout/stderr, apply parsed lines
     progress.rs          parse TubeDeck's progress templates (+ real-output fixture test)

@@ -1,0 +1,45 @@
+{
+ "_type": "playlist",
+ "id": "UCz75RVbH8q2jdBJ4SnwuZZQ",
+ "title": "Blender Studio - Playlists",
+ "uploader": "Blender Studio",
+ "channel": "Blender Studio",
+ "playlist_count": 15,
+ "webpage_url": "https://www.youtube.com/@BlenderStudio/playlists",
+ "entries": [
+  {
+   "_type": "url",
+   "ie_key": "YoutubeTab",
+   "id": "PLav47HAVZMjkxzzLDqYpTCosbsWjosUN0",
+   "url": "https://www.youtube.com/playlist?list=PLav47HAVZMjkxzzLDqYpTCosbsWjosUN0",
+   "title": "Blender Studio Logs",
+   "duration": null,
+   "thumbnails": [
+    {
+     "url": "https://i.ytimg.com/vi/Q1fMMYyt0I4/hqdefault.jpg?sqp=-oaymwEXCOADEI4CSFryq4qpAwkIARUAAIhCGAE=&rs=AOn4CLDCqTZIeYbwZW6a78yFEPOhnnP5vQ",
+     "height": 270,
+     "width": 480
+    }
+   ],
+   "live_status": null,
+   "availability": null
+  },
+  {
+   "_type": "url",
+   "ie_key": "YoutubeTab",
+   "id": "PLav47HAVZMjmQNihV3a22ztg0ielYFEas",
+   "url": "https://www.youtube.com/playlist?list=PLav47HAVZMjmQNihV3a22ztg0ielYFEas",
+   "title": "Live: Rigging Mikassa (Unfinished)",
+   "duration": null,
+   "thumbnails": [
+    {
+     "url": "https://i.ytimg.com/vi/nJQbMqbWeuc/hqdefault.jpg?sqp=-oaymwExCOADEI4CSFryq4qpAyMIARUAAIhCGAHwAQH4Af4JgALQBYoCDAgAEAEYWyBbKFswDw==&rs=AOn4CLCBT6FFqPwPCpCQDwoxRllIz6N49A",
+     "height": 270,
+     "width": 480
+    }
+   ],
+   "live_status": null,
+   "availability": null
+  }
+ ]
+}

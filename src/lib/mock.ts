@@ -23,7 +23,7 @@ setInterval(() => {
   const running = jobs.filter((j) => ["starting", "downloading", "processing"].includes(j.status));
   const ready = jobs.filter((x) => x.status === "queued" && (x.retryAt == null || x.retryAt <= Date.now()));
   for (const j of ready.slice(0, Math.max(0, settings.maxConcurrent - running.length))) {
-    Object.assign(j, { status: "downloading", startedAt: Date.now(), retryAt: null, title: `Sample video ${j.id}`, stage: "Stream 1/2" });
+    Object.assign(j, { status: "downloading", startedAt: Date.now(), retryAt: null, title: j.title ?? `Sample video ${j.id}`, stage: "Stream 1/2" });
     changed.push(j);
   }
   for (const j of jobs.filter((x) => x.status === "downloading" || x.status === "processing")) {
@@ -174,6 +174,7 @@ export async function mock<T>(cmd: string, args?: Record<string, unknown>): Prom
         errorHint: null,
         attempts: 0,
         retryAt: null,
+        group: null,
       }));
       jobs.push(...created);
       return r(created);
@@ -221,6 +222,33 @@ export async function mock<T>(cmd: string, args?: Record<string, unknown>): Prom
     }
     case "get_job_log":
       return r([`[TubeDeck] yt-dlp … -- ${jobs.find((j) => j.id === a.id)?.url ?? ""}`, "[youtube] Extracting URL (simulated)"]);
+    case "probe_url": {
+      await new Promise((res) => setTimeout(res, 700));
+      const u = String(a.url);
+      if (!/list=|@|playlist/i.test(u)) {
+        return r({ kind: "video", id: "abc", title: "Sample single video", url: u, duration: 212, thumbnail: null, uploader: "Sample channel" });
+      }
+      const entries = Array.from({ length: 24 }, (_, i) => ({
+        index: i + 1, id: `v${i + 1}`, title: i === 6 ? "[Private video]" : `Sample episode ${i + 1}: something interesting happens`,
+        url: i === 6 ? null : `https://www.youtube.com/watch?v=sample${i + 1}`, duration: 300 + i * 37, thumbnail: null,
+        isPlaylist: false, unavailable: i === 6,
+      }));
+      return r({ kind: "playlist", id: "PLsample", title: "Sample Playlist", url: u, uploader: "Sample channel", entries });
+    }
+    case "cancel_probe":
+      return r(undefined);
+    case "enqueue_playlist": {
+      const req = a.request as import("./types").PlaylistRequest;
+      const gid = `g${Date.now().toString(36)}`;
+      const created: Job[] = [];
+      for (const it of req.items) {
+        const [j] = (await mock<Job[]>("enqueue_jobs", { urls: [it.url], options: req.options, presetName: req.presetName }));
+        const real = jobs.find((x) => x.id === j.id)!;
+        Object.assign(real, { title: it.title, group: { id: gid, playlistId: req.playlistId, title: req.title, index: it.index, count: req.count } });
+        created.push(structuredClone(real));
+      }
+      return r(created);
+    }
     case "list_history": {
       const q = a.query as { search: string; status: string; limit: number; offset: number };
       const all = [...jobs.filter((j) => ["completed", "failed", "canceled"].includes(j.status)), ...archived]

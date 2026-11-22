@@ -163,6 +163,60 @@ export interface Job {
   attempts: number;
   /** Epoch ms when a queued job will be retried automatically. */
   retryAt: number | null;
+  /** Set when the job is one item of a playlist added through the picker. */
+  group: JobGroup | null;
+}
+
+export interface JobGroup {
+  id: string;
+  playlistId: string | null;
+  title: string;
+  /** 1-based position in the playlist. */
+  index: number;
+  count: number;
+}
+
+// ---- Playlist probing -----------------------------------------------------------------
+
+export interface ProbeEntry {
+  index: number;
+  id: string | null;
+  title: string;
+  url: string | null;
+  duration: number | null;
+  thumbnail: string | null;
+  isPlaylist: boolean;
+  unavailable: boolean;
+}
+
+export type ProbeResult =
+  | {
+      kind: "video";
+      id: string | null;
+      title: string;
+      url: string;
+      duration: number | null;
+      thumbnail: string | null;
+      uploader: string | null;
+    }
+  | {
+      kind: "playlist";
+      id: string | null;
+      title: string;
+      url: string;
+      uploader: string | null;
+      entries: ProbeEntry[];
+    };
+
+export interface PlaylistRequest {
+  playlistId: string | null;
+  title: string;
+  count: number;
+  items: { url: string; index: number; title: string | null; thumbnail: string | null }[];
+  options: DownloadOptions;
+  presetName: string | null;
+  subfolder: boolean;
+  numbered: boolean;
 }
 
 export type ErrorKind =

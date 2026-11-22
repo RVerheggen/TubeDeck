@@ -387,6 +387,70 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .log-row .job-log { margin: 0; }
 .load-more { display: flex; justify-content: center; padding-top: 14px; }
 
+/* Playlist groups in the queue */
+.group-card { border-bottom: 1px solid var(--border); padding: 12px 0; }
+.group-card:last-child { border-bottom: 0; }
+.group-head { display: flex; align-items: center; gap: 10px; }
+.group-icon {
+  width: 40px; height: 40px; flex: none; display: grid; place-items: center;
+  border-radius: 9px; background: var(--accent-soft); color: var(--accent);
+}
+.group-info { flex: 1; min-width: 0; }
+.group-info strong { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.group-items { margin: 8px 0 0 28px; padding-left: 12px; border-left: 2px solid var(--border); }
+.group-items .download-card { padding: 10px 0; }
+.icon-button.ghost { border-color: transparent; background: transparent; padding: 4px; }
+.item-index {
+  display: inline-block; min-width: 22px; margin-right: 6px; padding: 1px 5px;
+  font-family: var(--mono); font-size: 10px; color: var(--muted);
+  background: var(--panel2); border-radius: 4px; text-align: center;
+}
+.add-buttons { display: flex; gap: 8px; }
+
+/* Playlist picker */
+.modal.picker {
+  width: min(860px, 100%); max-height: calc(100vh - 60px);
+  display: flex; flex-direction: column; padding: 0; overflow: hidden;
+}
+.picker-head { display: flex; align-items: center; gap: 10px; padding: 18px 20px 14px; border-bottom: 1px solid var(--border); }
+.picker-title { flex: 1; min-width: 0; }
+.picker-title h2 { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
+.picker-title h2 svg { color: var(--accent); vertical-align: -3px; margin-right: 8px; }
+.picker-title small { display: block; color: var(--muted); font-size: 11.5px; margin-top: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.picker-status { display: grid; justify-items: center; gap: 10px; padding: 40px 24px; text-align: center; font-size: 13px; }
+.picker-status small { color: var(--muted); }
+.picker-status.error strong { color: var(--red); }
+.picker-status .modal-actions { justify-content: center; }
+.single-video { display: flex; gap: 14px; align-items: center; text-align: left; margin-bottom: 6px; }
+.single-video img { width: 160px; border-radius: 8px; }
+.single-video small { display: block; color: var(--muted); margin-top: 4px; }
+.picker-tools { display: flex; gap: 8px; padding: 12px 20px; flex-wrap: wrap; border-bottom: 1px solid var(--border); }
+.picker-tools > input { flex: 1; min-width: 180px; }
+.range-input { display: flex; gap: 6px; }
+.range-input input { width: 170px; }
+.range-input.invalid input { border-color: var(--red); }
+.picker-list { flex: 1; overflow: auto; padding: 6px 12px; min-height: 160px; }
+.picker-row {
+  display: grid; grid-template-columns: 18px 34px 64px 1fr auto; align-items: center; gap: 10px;
+  padding: 6px 8px; border-radius: 8px; cursor: pointer; font-size: 12.5px;
+}
+.picker-row:hover { background: var(--panel2); }
+.picker-row.on { background: var(--accent-soft); }
+.picker-row.disabled { cursor: default; opacity: .55; }
+.picker-row input { accent-color: var(--accent); margin: 0; pointer-events: none; }
+.picker-index { font-family: var(--mono); font-size: 10.5px; color: var(--muted); text-align: right; }
+.picker-thumb { width: 64px; height: 36px; border-radius: 5px; overflow: hidden; background: var(--panel2); display: grid; place-items: center; color: var(--muted); }
+.picker-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.picker-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.picker-name em { color: var(--muted); font-style: normal; }
+.picker-duration { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+.picker-empty { padding: 20px; text-align: center; }
+.small-button { padding: 5px 9px; font-size: 11px; }
+.picker-options { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 24px; padding: 12px 20px; border-top: 1px solid var(--border); }
+.picker-hint { grid-column: 1 / -1; display: flex; align-items: center; gap: 6px; }
+.picker-foot { margin: 0; padding: 12px 20px 16px; border-top: 1px solid var(--border); align-items: center; }
+.picker-foot > span { margin-right: auto; }
+
 /* Modal */
 .modal-backdrop {
   position: fixed; inset: 0; z-index: 60;

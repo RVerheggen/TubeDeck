@@ -5,6 +5,7 @@ import { invoke, isTauri } from "@tauri-apps/api/core";
 import type {
   AppLog,
   AppPaths,
+  Browser,
   BuiltCommand,
   DownloadOptions,
   EngineStatus,
@@ -12,7 +13,9 @@ import type {
   HistoryQuery,
   Job,
   ParsedUrl,
+  PlaylistRequest,
   Preset,
+  ProbeResult,
   Settings,
 } from "./types";
 import { mock, mockSubscribe } from "./mock";
@@ -50,6 +53,11 @@ export const api = {
   removeJob: (id: string) => call<void>("remove_job", { id }),
   clearFinishedJobs: () => call<void>("clear_finished_jobs"),
   getJobLog: (id: string) => call<string[]>("get_job_log", { id }),
+
+  probeUrl: (url: string, token: string, cookiesFromBrowser: Browser | null) =>
+    call<ProbeResult>("probe_url", { url, token, cookiesFromBrowser }),
+  cancelProbe: (token: string) => call<void>("cancel_probe", { token }),
+  enqueuePlaylist: (request: PlaylistRequest) => call<Job[]>("enqueue_playlist", { request }),
 
   listHistory: (query: HistoryQuery) => call<HistoryPage>("list_history", { query }),
   deleteHistory: (ids: string[]) => call<void>("delete_history", { ids }),

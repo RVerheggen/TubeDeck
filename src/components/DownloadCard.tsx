@@ -142,7 +142,10 @@ export function DownloadCard({ job }: { job: Job }) {
         </div>
         <div className="download-info">
           <div className="download-heading">
-            <strong title={job.url}>{job.title ?? shortUrl(job.url)}</strong>
+            <strong title={job.url}>
+              {job.group && <span className="item-index">{String(job.group.index).padStart(2, "0")}</span>}
+              {job.title ?? shortUrl(job.url)}
+            </strong>
             <span className="heading-right">
               {job.stage && (running || job.retryAt != null) && <span className="stage">{job.stage}</span>}
               <span className={`status-pill ${retryIn != null ? "retrying" : job.status}`}>{pillLabel}</span>

@@ -4,8 +4,14 @@ use crate::{
     args::{self, BuiltCommand},
     binaries::{self, EngineStatus},
     db::{Db, HistoryPage, HistoryQuery},
-    engine::{Engine, job::Job},
+    engine::{
+        Engine, PlaylistRequest,
+        job::Job,
+        probe::{self, ProbeResult, Probes},
+        runner,
+    },
     jsonfile,
+    options::Browser,
     options::DownloadOptions,
     presets::{self, Preset},
     settings::Settings,
@@ -190,6 +196,48 @@ pub fn clear_finished_jobs(engine: State<'_, Arc<Engine>>) -> CmdResult<()> {
 #[tauri::command]
 pub fn get_job_log(engine: State<'_, Arc<Engine>>, id: String) -> Vec<String> {
     engine.log(&id)
+}
+
+// ---- Playlists -------------------------------------------------------------------------
+
+/// Inspect a URL: single video or playlist (with its entries). `token` lets the UI cancel.
+#[tauri::command]
+pub async fn probe_url(
+    state: State<'_, AppState>,
+    probes: State<'_, Probes>,
+    url: String,
+    token: String,
+    cookies_from_browser: Option<Browser>,
+) -> CmdResult<ProbeResult> {
+    let tools = runner::tools(&state)?;
+    let started = std::time::Instant::now();
+    let result = probe::run(&probes, &token, url.trim(), &tools, cookies_from_browser).await;
+    match &result {
+        Ok(ProbeResult::Playlist { entries, title, .. }) => log::info!(
+            "Probed playlist \"{title}\": {} entries in {:.1}s",
+            entries.len(),
+            started.elapsed().as_secs_f32()
+        ),
+        Ok(ProbeResult::Video { .. }) => log::info!(
+            "Probed single video in {:.1}s",
+            started.elapsed().as_secs_f32()
+        ),
+        Err(e) => log::warn!("Probe failed: {e}"),
+    }
+    result
+}
+
+#[tauri::command]
+pub fn cancel_probe(probes: State<'_, Probes>, token: String) {
+    probes.cancel(&token);
+}
+
+#[tauri::command]
+pub fn enqueue_playlist(
+    engine: State<'_, Arc<Engine>>,
+    request: PlaylistRequest,
+) -> CmdResult<Vec<Job>> {
+    engine.enqueue_playlist(request)
 }
 
 // ---- History ---------------------------------------------------------------------------

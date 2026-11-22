@@ -17,8 +17,9 @@
 
 pub mod errors;
 pub mod job;
+pub mod probe;
 pub mod progress;
-mod runner;
+pub(crate) mod runner;
 mod winjob;
 
 use crate::{args, commands::AppState, db::Db, options::DownloadOptions};
@@ -87,6 +88,32 @@ impl Inner {
         }
         Ok(true)
     }
+}
+
+/// One playlist entry the user selected in the picker.
+#[derive(Debug, Clone, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlaylistItem {
+    pub url: String,
+    pub index: u64,
+    pub title: Option<String>,
+    pub thumbnail: Option<String>,
+}
+
+#[derive(Debug, Clone, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlaylistRequest {
+    pub playlist_id: Option<String>,
+    pub title: String,
+    /// Total entries in the playlist (for numbering width and "3/32" labels).
+    pub count: u64,
+    pub items: Vec<PlaylistItem>,
+    pub options: DownloadOptions,
+    pub preset_name: Option<String>,
+    /// Save into a folder named after the playlist.
+    pub subfolder: bool,
+    /// Prefix files with their playlist position.
+    pub numbered: bool,
 }
 
 /// What the runner reports when yt-dlp has exited (or never started).
@@ -456,6 +483,61 @@ impl Engine {
                 preset_name.clone(),
             ));
         }
+        Ok(self.add_jobs(created))
+    }
+
+    /// Add one job per selected playlist item, grouped, with titles and thumbnails from the
+    /// probe so the queue looks right before each download starts.
+    pub fn enqueue_playlist(self: &Arc<Self>, req: PlaylistRequest) -> Result<Vec<Job>, String> {
+        let selected: Vec<&PlaylistItem> = req.items.iter().collect();
+        if selected.is_empty() {
+            return Err("No items selected".into());
+        }
+        let group_id = format!("g{}", self.new_id());
+        let folder = req.subfolder.then(|| probe::folder_name(&req.title));
+        let mut created = Vec::new();
+        for item in selected {
+            args::validate_url(&item.url).map_err(|e| format!("{}: {e}", item.url))?;
+            let mut options = req.options.clone();
+            let template = if options.filename_template.trim().is_empty() {
+                crate::options::DEFAULT_FILENAME_TEMPLATE.to_string()
+            } else {
+                options.filename_template.clone()
+            };
+            options.filename_template = probe::item_template(
+                &template,
+                folder.as_deref(),
+                req.numbered
+                    .then_some((item.index, req.count.max(item.index))),
+            );
+            // Each item is a single video; never let yt-dlp expand it into a playlist again.
+            options.no_playlist = true;
+            let mut job = Job::new(
+                self.new_id(),
+                item.url.clone(),
+                options,
+                req.preset_name.clone(),
+            );
+            job.title = item.title.clone();
+            job.thumbnail = item.thumbnail.clone();
+            job.group = Some(job::JobGroup {
+                id: group_id.clone(),
+                playlist_id: req.playlist_id.clone(),
+                title: req.title.clone(),
+                index: item.index,
+                count: req.count,
+            });
+            created.push(job);
+        }
+        log::info!(
+            "Queued {} item(s) from playlist \"{}\"",
+            created.len(),
+            req.title
+        );
+        Ok(self.add_jobs(created))
+    }
+
+    fn add_jobs(self: &Arc<Self>, created: Vec<Job>) -> Vec<Job> {
         {
             let mut inner = self.lock();
             for job in &created {
@@ -465,7 +547,7 @@ impl Engine {
         }
         log::info!("Queued {} job(s)", created.len());
         self.schedule();
-        Ok(created)
+        created
     }
 
     /// Start ready jobs in queue order until the concurrency limit is reached. Reads the

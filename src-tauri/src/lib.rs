@@ -81,6 +81,7 @@ pub fn run() {
             );
             let resume = state.settings.lock().unwrap().resume_on_startup;
             app.manage(state);
+            app.manage(engine::probe::Probes::default());
             let engine = Engine::new(
                 app.handle().clone(),
                 temp_root,
@@ -120,6 +121,9 @@ pub fn run() {
             commands::clear_history,
             commands::redownload,
             commands::export_diagnostics,
+            commands::probe_url,
+            commands::cancel_probe,
+            commands::enqueue_playlist,
         ])
         .build(tauri::generate_context!())
         .expect("error while building TubeDeck");

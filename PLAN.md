@@ -296,7 +296,11 @@ Optional: generate TS types from Rust (`ts-rs` or `tauri-specta`) so `lib/types.
    Jobs are stored as a JSON blob plus indexed columns, so new `Job` fields need no migration. Writes ride on the existing 250 ms UI batch. "Clear finished" moves jobs to history instead of deleting them. The M1–M3 `settings.json`/`presets.json` files are imported once. "Export diagnostics" writes a text report with `%USERPROFILE%` redacted.
    Bug found during E2E testing and fixed: a normal quit saved running jobs as *paused*, so "resume on startup" only worked after a crash. Shutdown now keeps the running status, so quit and crash share one recovery path (regression test added).
    Verified across a real restart: a paused job kept its 10.0%; an interrupted job resumed by itself and continued at 5.2%; history, per-job logs and diagnostics survived; the close dialog appeared while downloading, and quitting left no processes.
-6. **M5. Playlists.** Probe + picker + grouped jobs (B5 part 2).
+6. ✅ **M5. Playlists.** Probe + picker + grouped jobs (B5 part 2).
+   - **Probe:** `yt-dlp -J --flat-playlist` lists entries without visiting each video (32 items in 1.7 s, 136 in about 2 s). It can be canceled, which kills the process tree, and it times out after 180 s.
+   - **Picker:** filter, ranges ("1-10, 15, 20-"), shift-click, nested playlists opened in place (a channel's Playlists tab), "Only the linked video" for `watch?v=…&list=…` URLs, and a fallback to a single download when probing fails.
+   - **Items:** each becomes its own job with title and thumbnail from the probe, grouped under one collapsible header with group pause/resume/cancel. Files go to `<Playlist title>/NN - <template>`, and the folder name is made safe for Windows.
+   - **Verified against real YouTube:** playlist, watch+list, single video, nested playlists, a deleted playlist's error, cancel (no process left), and two items downloaded into `Blender Studio Logs\26 - …` and `31 - …`.
 7. **M6. Binaries.** First-run setup, managed downloads, yt-dlp updates, error classification (B6, B8).
 8. **M7. Release.** Tests, CI, installer testing, signing, README (Part C, A7).
 

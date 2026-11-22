@@ -24,6 +24,8 @@ interface AppState {
   engine: EngineStatus | null;
   engineLoading: boolean;
   urlDraft: string;
+  /** URLs waiting for the playlist picker; the first one is shown. */
+  pickerUrls: string[];
   jobs: Job[];
   toasts: Toast[];
 
@@ -37,7 +39,9 @@ interface AppState {
   updatePreset: (preset: Preset) => Promise<void>;
   deletePreset: (id: string) => Promise<void>;
   refreshEngine: () => Promise<void>;
-  enqueue: (urls: string[]) => Promise<void>;
+  enqueue: (urls: string[], overrides?: Partial<DownloadOptions>) => Promise<void>;
+  openPicker: (urls: string[]) => void;
+  nextPicker: () => void;
   applyJobUpdates: (jobs: Job[]) => void;
   applyJobRemovals: (ids: string[]) => void;
   applyJobOrder: (ids: string[]) => void;
@@ -98,6 +102,7 @@ export const useAppStore = create<AppState>((set, get) => {
     engine: null,
     engineLoading: false,
     urlDraft: "",
+    pickerUrls: [],
     jobs: [],
     toasts: [],
 
@@ -122,6 +127,8 @@ export const useAppStore = create<AppState>((set, get) => {
 
     setView: (view) => set({ view }),
     setUrlDraft: (urlDraft) => set({ urlDraft }),
+    openPicker: (urls) => set({ pickerUrls: [...get().pickerUrls, ...urls] }),
+    nextPicker: () => set({ pickerUrls: get().pickerUrls.slice(1) }),
 
     updateSettings: (patch) => {
       const s = get().settings;
@@ -196,12 +203,12 @@ export const useAppStore = create<AppState>((set, get) => {
       }
     },
 
-    enqueue: async (urls) => {
+    enqueue: async (urls, overrides) => {
       const s = get().settings;
       if (!s || urls.length === 0) return;
       const presetName = get().presets.find((p) => p.id === s.activePresetId)?.name ?? null;
       try {
-        const created = await api.enqueueJobs(urls, s.currentOptions, presetName);
+        const created = await api.enqueueJobs(urls, { ...s.currentOptions, ...overrides }, presetName);
         get().applyJobUpdates(created);
         get().toast("success", `Added ${created.length} item${created.length > 1 ? "s" : ""} to the queue`);
       } catch (e) {
