@@ -15,7 +15,6 @@ import type { Theme, ViewId } from "../lib/types";
 import { EngineStatus } from "./EngineStatus";
 
 const ACTIVE = new Set(["queued", "starting", "downloading", "processing", "paused"]);
-const FINISHED = new Set(["completed", "failed", "canceled"]);
 const NEXT_THEME: Record<Theme, Theme> = { system: "dark", dark: "light", light: "system" };
 
 export function Sidebar() {
@@ -27,7 +26,6 @@ export function Sidebar() {
   const updateSettings = useAppStore((s) => s.updateSettings);
 
   const activeCount = jobs.filter((j) => ACTIVE.has(j.status)).length;
-  const finishedCount = jobs.filter((j) => FINISHED.has(j.status)).length;
 
   const item = (id: ViewId, label: string, icon: ReactNode, count?: number) => (
     <button
@@ -64,7 +62,7 @@ export function Sidebar() {
       {item("presets", "Presets", <Bookmark size={17} />, presets.length)}
 
       <div className="nav-label">ACTIVITY</div>
-      {item("history", "History", <History size={17} />, finishedCount)}
+      {item("history", "History", <History size={17} />)}
       {item("logs", "Logs", <ScrollText size={17} />)}
 
       <div className="sidebar-bottom">

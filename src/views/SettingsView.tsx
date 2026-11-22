@@ -2,7 +2,8 @@ import { Cpu, FolderOpen, Monitor, Moon, RefreshCw, Settings as SettingsIcon, Su
 import { useEffect, useState } from "react";
 import { api, inDesktop, pickFolder, revealInExplorer } from "../lib/api";
 import type { AppPaths, BinaryStatus, Settings } from "../lib/types";
-import { Field, Panel, Segmented } from "../components/ui";
+import { ExportDiagnosticsButton } from "../components/LogViewer";
+import { Field, Panel, Segmented, Toggle } from "../components/ui";
 import { useAppStore } from "../store/useAppStore";
 
 function BinaryRow({
@@ -98,6 +99,14 @@ export function SettingsView() {
               onChange={(e) => update({ autoRetry: Number(e.target.value) })}
             />
           </Field>
+          <div className="field wide">
+            <Toggle
+              label="Resume downloads when TubeDeck starts"
+              hint="Downloads that were running or queued when you closed TubeDeck continue automatically. When off, they wait as paused."
+              checked={settings.resumeOnStartup}
+              onChange={(resumeOnStartup) => update({ resumeOnStartup })}
+            />
+          </div>
           <Field label="Default download folder" wide>
             <div className="input-with-button">
               <input
@@ -157,10 +166,10 @@ export function SettingsView() {
       </Panel>
 
       {paths && inDesktop && (
-        <Panel title="App data">
+        <Panel title="App data" actions={<ExportDiagnosticsButton />}>
           <div className="path-list">
             {[
-              ["Settings & presets", paths.configDir],
+              ["Database & binaries", paths.dataDir],
               ["Logs", paths.logDir],
             ].map(([label, p]) => (
               <div key={label} className="path-row">

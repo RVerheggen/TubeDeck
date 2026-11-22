@@ -9,6 +9,11 @@
 //! The order of `Inner::jobs` is the queue priority: the scheduler starts the first ready
 //! queued job. Pausing kills the process tree but keeps the job's temp folder, so resuming
 //! re-runs the same command and yt-dlp continues from the partial files.
+//!
+//! Persistence: every UI batch is also written to SQLite, so the queue survives restarts.
+//! Finished jobs stay in the queue until cleared, then live on in history (`archived`).
+//! Each job's log is kept in memory and written to `logs/jobs/<id>.log` whenever the job
+//! stops (finish, pause, failure) and on shutdown.
 
 pub mod errors;
 pub mod job;
@@ -16,7 +21,7 @@ pub mod progress;
 mod runner;
 mod winjob;
 
-use crate::{args, commands::AppState, options::DownloadOptions};
+use crate::{args, commands::AppState, db::Db, options::DownloadOptions};
 use job::{Job, JobStatus, now_ms};
 use std::{
     collections::{HashMap, HashSet, VecDeque},
@@ -24,7 +29,7 @@ use std::{
     process::ExitStatus,
     sync::{
         Arc, Mutex,
-        atomic::{AtomicU64, Ordering},
+        atomic::{AtomicBool, AtomicU64, Ordering},
     },
     time::Duration,
 };
@@ -95,24 +100,103 @@ pub struct Engine {
     app: AppHandle,
     inner: Mutex<Inner>,
     temp_root: PathBuf,
+    job_log_dir: PathBuf,
+    db: Arc<Db>,
     seq: AtomicU64,
+    shutting_down: AtomicBool,
+}
+
+/// Bring jobs from the previous session back into a consistent state.
+/// Returns the jobs to keep in the queue and the ids of finished jobs to archive.
+pub(crate) fn recover(jobs: Vec<Job>, resume: bool) -> (Vec<Job>, Vec<String>) {
+    let (finished, mut queue): (Vec<Job>, Vec<Job>) =
+        jobs.into_iter().partition(|j| j.status.is_finished());
+    for j in &mut queue {
+        j.progress.speed = None;
+        j.progress.eta = None;
+        j.retry_at = None;
+        match j.status {
+            JobStatus::Starting | JobStatus::Downloading | JobStatus::Processing if resume => {
+                j.status = JobStatus::Queued;
+                j.stage = Some("Resuming after restart".into());
+            }
+            JobStatus::Starting | JobStatus::Downloading | JobStatus::Processing => {
+                j.status = JobStatus::Paused;
+                j.stage = Some("Interrupted when TubeDeck closed".into());
+            }
+            JobStatus::Queued if !resume => {
+                j.status = JobStatus::Paused;
+                j.stage = Some("Paused when TubeDeck closed".into());
+            }
+            _ => {}
+        }
+    }
+    (queue, finished.into_iter().map(|j| j.id).collect())
 }
 
 impl Engine {
-    pub fn new(app: AppHandle, temp_root: PathBuf) -> Arc<Self> {
-        // The queue isn't persisted yet (M4), so partial downloads from a previous session
-        // can never be resumed; clear them instead of letting them pile up.
-        if temp_root.exists() {
-            match std::fs::remove_dir_all(&temp_root) {
-                Ok(()) => log::info!("Cleared leftover temp files in {}", temp_root.display()),
-                Err(e) => log::warn!("Could not clear {}: {e}", temp_root.display()),
+    pub fn new(
+        app: AppHandle,
+        temp_root: PathBuf,
+        job_log_dir: PathBuf,
+        db: Arc<Db>,
+        resume: bool,
+    ) -> Arc<Self> {
+        let stored = db.load_queue().unwrap_or_else(|e| {
+            log::error!("Could not load the saved queue: {e}");
+            Vec::new()
+        });
+        let (jobs, finished) = recover(stored, resume);
+        if let Err(e) = db.archive_jobs(&finished) {
+            log::warn!("Could not move finished jobs to history: {e}");
+        }
+        let positioned: Vec<(Job, usize)> = jobs
+            .iter()
+            .cloned()
+            .enumerate()
+            .map(|(i, j)| (j, i))
+            .collect();
+        if let Err(e) = db.upsert_jobs(&positioned) {
+            log::warn!("Could not save the recovered queue: {e}");
+        }
+        log::info!(
+            "Restored {} queued job(s); {} finished job(s) moved to history",
+            jobs.len(),
+            finished.len()
+        );
+
+        // Partial downloads are only useful for jobs that can still resume.
+        let keep: HashSet<&str> = jobs.iter().map(|j| j.id.as_str()).collect();
+        if let Ok(entries) = std::fs::read_dir(&temp_root) {
+            for entry in entries.flatten() {
+                if !keep.contains(entry.file_name().to_string_lossy().as_ref()) {
+                    let _ = std::fs::remove_dir_all(entry.path());
+                }
             }
         }
+
+        let mut logs = HashMap::new();
+        for j in &jobs {
+            if let Ok(text) = std::fs::read_to_string(job_log_dir.join(format!("{}.log", j.id))) {
+                logs.insert(
+                    j.id.clone(),
+                    text.lines().map(String::from).collect::<VecDeque<_>>(),
+                );
+            }
+        }
+
         let engine = Arc::new(Self {
             app,
-            inner: Mutex::new(Inner::default()),
+            inner: Mutex::new(Inner {
+                jobs,
+                logs,
+                ..Default::default()
+            }),
             temp_root,
+            job_log_dir,
+            db,
             seq: AtomicU64::new(0),
+            shutting_down: AtomicBool::new(false),
         });
         let weak = Arc::downgrade(&engine);
         tauri::async_runtime::spawn(async move {
@@ -130,8 +214,9 @@ impl Engine {
         self.inner.lock().unwrap_or_else(|e| e.into_inner())
     }
 
+    /// Send changed jobs to the UI and write them to the database (one transaction).
     fn flush(&self) {
-        let batch: Vec<Job> = {
+        let batch: Vec<(Job, usize)> = {
             let mut inner = self.lock();
             if inner.dirty.is_empty() {
                 return;
@@ -140,13 +225,50 @@ impl Engine {
             inner
                 .jobs
                 .iter()
-                .filter(|j| dirty.contains(&j.id))
-                .cloned()
+                .enumerate()
+                .filter(|(_, j)| dirty.contains(&j.id))
+                .map(|(i, j)| (j.clone(), i))
                 .collect()
         };
-        if !batch.is_empty() {
-            let _ = self.app.emit(EVENT_UPDATED, batch);
+        if batch.is_empty() {
+            return;
         }
+        if let Err(e) = self.db.upsert_jobs(&batch) {
+            log::error!("Could not save job updates: {e}");
+        }
+        let jobs: Vec<Job> = batch.into_iter().map(|(j, _)| j).collect();
+        let _ = self.app.emit(EVENT_UPDATED, jobs);
+    }
+
+    fn log_path(&self, id: &str) -> PathBuf {
+        self.job_log_dir.join(format!("{id}.log"))
+    }
+
+    /// Write a job's in-memory log to its file (overwriting; the buffer holds the full log).
+    fn write_log(&self, id: &str) {
+        let text = {
+            let inner = self.lock();
+            match inner.logs.get(id) {
+                Some(lines) => {
+                    lines
+                        .iter()
+                        .map(String::as_str)
+                        .collect::<Vec<_>>()
+                        .join("\n")
+                        + "\n"
+                }
+                None => return,
+            }
+        };
+        if let Err(e) = std::fs::create_dir_all(&self.job_log_dir)
+            .and_then(|_| std::fs::write(self.log_path(id), text))
+        {
+            log::warn!("Could not write log for job {id}: {e}");
+        }
+    }
+
+    fn delete_log(&self, id: &str) {
+        let _ = std::fs::remove_file(self.log_path(id));
     }
 
     fn new_id(&self) -> String {
@@ -178,11 +300,13 @@ impl Engine {
         self.lock().jobs.iter().find(|j| j.id == id).cloned()
     }
 
+    /// A job's log: from memory while it's in the queue, else from its file (history).
     pub fn log(&self, id: &str) -> Vec<String> {
-        self.lock()
-            .logs
-            .get(id)
-            .map(|l| l.iter().cloned().collect())
+        if let Some(l) = self.lock().logs.get(id) {
+            return l.iter().cloned().collect();
+        }
+        std::fs::read_to_string(self.log_path(id))
+            .map(|t| t.lines().map(String::from).collect())
             .unwrap_or_default()
     }
 
@@ -219,6 +343,11 @@ impl Engine {
 
     /// The process has exited: decide the job's final (or next) state.
     pub(crate) fn complete(self: &Arc<Self>, id: &str, outcome: Outcome) {
+        // During shutdown the job was already saved as interrupted; don't overwrite that
+        // with the "failed" exit caused by killing the process.
+        if self.shutting_down.load(Ordering::SeqCst) {
+            return;
+        }
         let (_, max_auto_retry) = self.settings();
         let mut delete_temp = false;
         let mut retry_in: Option<Duration> = None;
@@ -294,6 +423,7 @@ impl Engine {
 
         log::info!("Job {id} finished: {summary}");
         self.push_log(id, format!("[TubeDeck] Finished: {summary}"));
+        self.write_log(id);
         if delete_temp {
             self.remove_temp(id);
         }
@@ -485,25 +615,45 @@ impl Engine {
             }
             inner.jobs.iter().map(|j| j.id.clone()).collect()
         };
+        if let Err(e) = self.db.set_positions(&order) {
+            log::warn!("Could not save queue order: {e}");
+        }
         let _ = self.app.emit(EVENT_ORDER, order);
         Ok(())
     }
 
+    /// Take jobs out of the queue. Finished jobs move to history; jobs that never finished
+    /// (queued, paused) are deleted along with their partial files and log.
     pub fn remove(&self, ids: &[String]) -> Result<(), String> {
-        {
+        let (archive, delete): (Vec<String>, Vec<String>) = {
             let mut inner = self.lock();
             if let Some(id) = ids.iter().find(|id| inner.running.contains_key(*id)) {
                 return Err(format!("Job {id} is still running; cancel it first"));
             }
             let set: HashSet<&String> = ids.iter().collect();
+            let (finished, unfinished): (Vec<&Job>, Vec<&Job>) = inner
+                .jobs
+                .iter()
+                .filter(|j| set.contains(&j.id))
+                .partition(|j| j.status.is_finished());
+            let split = (
+                finished.iter().map(|j| j.id.clone()).collect(),
+                unfinished.iter().map(|j| j.id.clone()).collect(),
+            );
             inner.jobs.retain(|j| !set.contains(&j.id));
             for id in ids {
                 inner.logs.remove(id);
                 inner.dirty.remove(id);
             }
-        }
+            split
+        };
+        self.db.archive_jobs(&archive)?;
+        self.db.delete_jobs(&delete)?;
         for id in ids {
             self.remove_temp(id);
+        }
+        for id in &delete {
+            self.delete_log(id);
         }
         if !ids.is_empty() {
             let _ = self.app.emit(EVENT_REMOVED, ids.to_vec());
@@ -511,6 +661,7 @@ impl Engine {
         Ok(())
     }
 
+    /// Move all finished jobs from the queue to history.
     pub fn clear_finished(&self) -> Result<(), String> {
         let ids: Vec<String> = self
             .lock()
@@ -522,13 +673,168 @@ impl Engine {
         self.remove(&ids)
     }
 
-    /// Kill every running process (used on app exit).
-    pub fn shutdown(&self) {
-        let inner = self.lock();
-        for r in inner.running.values() {
-            if let Some(tree) = &r.tree {
-                let _ = tree.kill();
+    /// Permanently delete finished jobs (from the queue, history and their logs).
+    pub fn delete_history(&self, ids: &[String]) -> Result<(), String> {
+        let in_queue: Vec<String> = {
+            let inner = self.lock();
+            let set: HashSet<&String> = ids.iter().collect();
+            if inner
+                .jobs
+                .iter()
+                .any(|j| set.contains(&j.id) && !j.status.is_finished())
+            {
+                return Err("Only finished downloads can be deleted from history".into());
             }
+            inner
+                .jobs
+                .iter()
+                .filter(|j| set.contains(&j.id))
+                .map(|j| j.id.clone())
+                .collect()
+        };
+        if !in_queue.is_empty() {
+            self.remove(&in_queue)?;
         }
+        self.db.delete_jobs(ids)?;
+        for id in ids {
+            self.delete_log(id);
+        }
+        Ok(())
+    }
+
+    /// Delete every finished job, in the queue and in history.
+    pub fn clear_history(&self) -> Result<(), String> {
+        let mut ids = self.db.archived_finished_ids()?;
+        ids.extend(
+            self.lock()
+                .jobs
+                .iter()
+                .filter(|j| j.status.is_finished())
+                .map(|j| j.id.clone()),
+        );
+        self.delete_history(&ids)
+    }
+
+    /// App exit: kill every process, save the queue and write all logs.
+    ///
+    /// Running jobs keep their running status in the database on purpose: startup recovery
+    /// (`recover`) then treats a normal quit exactly like a crash and resumes them or
+    /// pauses them according to the "resume on startup" setting.
+    pub fn shutdown(&self) {
+        self.shutting_down.store(true, Ordering::SeqCst);
+        let (snapshot, ids) = {
+            let mut inner = self.lock();
+            let running: Vec<String> = inner.running.keys().cloned().collect();
+            for r in inner.running.values() {
+                if let Some(tree) = &r.tree {
+                    let _ = tree.kill();
+                }
+            }
+            for id in &running {
+                if let Ok(job) = inner.job_mut(id) {
+                    job.stage = Some("Interrupted when TubeDeck closed".into());
+                    job.progress.speed = None;
+                    job.progress.eta = None;
+                }
+            }
+            let snapshot: Vec<(Job, usize)> = inner
+                .jobs
+                .iter()
+                .cloned()
+                .enumerate()
+                .map(|(i, j)| (j, i))
+                .collect();
+            (snapshot, inner.logs.keys().cloned().collect::<Vec<_>>())
+        };
+        if let Err(e) = self.db.upsert_jobs(&snapshot) {
+            log::error!("Could not save the queue on exit: {e}");
+        }
+        for id in ids {
+            self.write_log(&id);
+        }
+        log::info!("Engine shut down; {} job(s) saved", snapshot.len());
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn job(id: &str, status: JobStatus) -> Job {
+        let mut j = Job::new(
+            id.into(),
+            "https://x".into(),
+            DownloadOptions::default(),
+            None,
+        );
+        j.status = status;
+        j.progress.speed = Some(1.0);
+        j.retry_at = Some(5);
+        j
+    }
+
+    #[test]
+    fn recover_with_resume() {
+        let (queue, finished) = recover(
+            vec![
+                job("run", JobStatus::Downloading),
+                job("done", JobStatus::Completed),
+                job("q", JobStatus::Queued),
+                job("p", JobStatus::Paused),
+                job("fail", JobStatus::Failed),
+            ],
+            true,
+        );
+        assert_eq!(finished, ["done", "fail"]);
+        let st: Vec<_> = queue.iter().map(|j| (j.id.as_str(), j.status)).collect();
+        assert_eq!(
+            st,
+            [
+                ("run", JobStatus::Queued),
+                ("q", JobStatus::Queued),
+                ("p", JobStatus::Paused)
+            ]
+        );
+        assert!(
+            queue
+                .iter()
+                .all(|j| j.progress.speed.is_none() && j.retry_at.is_none())
+        );
+    }
+
+    #[test]
+    fn recover_without_resume_pauses_everything() {
+        let (queue, _) = recover(
+            vec![
+                job("run", JobStatus::Processing),
+                job("q", JobStatus::Queued),
+            ],
+            false,
+        );
+        assert!(queue.iter().all(|j| j.status == JobStatus::Paused));
+        assert!(queue[0].stage.as_deref().unwrap().contains("Interrupted"));
+    }
+}
+
+#[cfg(test)]
+mod shutdown_contract {
+    use super::*;
+
+    /// Regression: a graceful quit must leave running jobs in a state that `recover`
+    /// resumes. Shutdown keeps the running status; recovery decides from the setting.
+    #[test]
+    fn running_status_from_shutdown_is_resumed_or_paused() {
+        let mut j = Job::new(
+            "r".into(),
+            "https://x".into(),
+            DownloadOptions::default(),
+            None,
+        );
+        j.status = JobStatus::Downloading;
+        j.stage = Some("Interrupted when TubeDeck closed".into());
+        let (q, _) = recover(vec![j.clone()], true);
+        assert_eq!(q[0].status, JobStatus::Queued);
+        let (q, _) = recover(vec![j], false);
+        assert_eq!(q[0].status, JobStatus::Paused);
     }
 }

@@ -1,6 +1,8 @@
 mod args;
 mod binaries;
 mod commands;
+mod db;
+mod diagnostics;
 mod engine;
 mod jsonfile;
 mod options;
@@ -8,6 +10,7 @@ mod presets;
 mod settings;
 
 use commands::{AppState, LOG_FILE_NAME};
+use db::Db;
 use engine::Engine;
 use std::sync::Arc;
 use tauri::Manager;
@@ -52,17 +55,41 @@ pub fn run() {
                 .unwrap_or_default();
 
             log::info!(
-                "TubeDeck {} starting; config in {}",
+                "TubeDeck {} starting; data in {}",
                 app.package_info().version,
-                config_dir.display()
+                local_data.display()
             );
-            app.manage(AppState::load(
+            let db_path = local_data.join("tubedeck.db");
+            let db = match Db::open(&db_path) {
+                Ok(db) => db,
+                Err(e) => {
+                    // Keep the app usable; nothing will be saved this session.
+                    log::error!(
+                        "{e} ({}). Using a temporary in-memory database.",
+                        db_path.display()
+                    );
+                    Db::open_in_memory()?
+                }
+            };
+            let db = Arc::new(db);
+            let state = AppState::load(
+                db.clone(),
                 config_dir,
-                log_dir,
+                log_dir.clone(),
                 managed_bin_dir,
                 default_download_folder,
-            ));
-            app.manage(Engine::new(app.handle().clone(), temp_root));
+            );
+            let resume = state.settings.lock().unwrap().resume_on_startup;
+            app.manage(state);
+            let engine = Engine::new(
+                app.handle().clone(),
+                temp_root,
+                log_dir.join("jobs"),
+                db,
+                resume,
+            );
+            app.manage(engine.clone());
+            engine.schedule();
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -88,6 +115,11 @@ pub fn run() {
             commands::remove_job,
             commands::clear_finished_jobs,
             commands::get_job_log,
+            commands::list_history,
+            commands::delete_history,
+            commands::clear_history,
+            commands::redownload,
+            commands::export_diagnostics,
         ])
         .build(tauri::generate_context!())
         .expect("error while building TubeDeck");

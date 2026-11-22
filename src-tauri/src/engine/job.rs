@@ -2,9 +2,9 @@
 
 use super::errors::ErrorKind;
 use crate::options::DownloadOptions;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum JobStatus {
     Queued,
@@ -26,7 +26,7 @@ impl JobStatus {
     }
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Serialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Progress {
     /// Overall percentage across all streams (0–100).
@@ -39,7 +39,7 @@ pub struct Progress {
     pub eta: Option<u64>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Job {
     pub id: String,
@@ -60,6 +60,7 @@ pub struct Job {
     pub error_kind: Option<ErrorKind>,
     pub error_hint: Option<String>,
     /// Automatic retries made so far for the current run.
+    #[serde(default)]
     pub attempts: u32,
     /// When a queued job is waiting for an automatic retry (ms since epoch).
     pub retry_at: Option<u64>,

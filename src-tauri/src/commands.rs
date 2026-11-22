@@ -3,6 +3,7 @@
 use crate::{
     args::{self, BuiltCommand},
     binaries::{self, EngineStatus},
+    db::{Db, HistoryPage, HistoryQuery},
     engine::{Engine, job::Job},
     jsonfile,
     options::DownloadOptions,
@@ -11,7 +12,7 @@ use crate::{
 };
 use serde::Serialize;
 use std::{
-    path::PathBuf,
+    path::{Path, PathBuf},
     sync::{Arc, Mutex},
 };
 use tauri::State;
@@ -19,6 +20,7 @@ use tauri::State;
 pub const LOG_FILE_NAME: &str = "tubedeck";
 
 pub struct AppState {
+    pub db: Arc<Db>,
     pub settings: Mutex<Settings>,
     pub user_presets: Mutex<Vec<Preset>>,
     pub config_dir: PathBuf,
@@ -28,31 +30,25 @@ pub struct AppState {
 }
 
 impl AppState {
-    fn settings_path(&self) -> PathBuf {
-        self.config_dir.join("settings.json")
-    }
-    fn presets_path(&self) -> PathBuf {
-        self.config_dir.join("presets.json")
-    }
-
-    /// Load settings and presets from disk. Corrupt files are logged and replaced by defaults
+    /// Load settings and presets from the database. On first run, settings and presets from
+    /// the M1–M3 JSON files are imported. Unreadable data is logged and replaced by defaults
     /// so the app always starts.
     pub fn load(
+        db: Arc<Db>,
         config_dir: PathBuf,
         log_dir: PathBuf,
         managed_bin_dir: PathBuf,
         default_download_folder: String,
     ) -> Self {
-        let state = Self {
-            settings: Mutex::new(Settings::default()),
-            user_presets: Mutex::new(Vec::new()),
-            config_dir,
-            log_dir,
-            managed_bin_dir,
-            default_download_folder,
-        };
-        let mut settings = match jsonfile::read::<Settings>(&state.settings_path()) {
-            Ok(s) => s.unwrap_or_default(),
+        let mut settings = match db.load_settings() {
+            Ok(Some(s)) => s,
+            Ok(None) => import_legacy::<Settings>(&config_dir.join("settings.json"))
+                .inspect(|s| {
+                    if let Err(e) = db.save_settings(s) {
+                        log::error!("Could not import settings: {e}");
+                    }
+                })
+                .unwrap_or_default(),
             Err(e) => {
                 log::error!("{e}; using default settings");
                 Settings::default()
@@ -60,18 +56,47 @@ impl AppState {
         }
         .sanitized();
         if settings.download_folder.trim().is_empty() {
-            settings.download_folder = state.default_download_folder.clone();
+            settings.download_folder = default_download_folder.clone();
         }
-        let user = match jsonfile::read::<Vec<Preset>>(&state.presets_path()) {
-            Ok(p) => p.unwrap_or_default(),
-            Err(e) => {
-                log::error!("{e}; starting without user presets");
-                Vec::new()
+
+        let mut user = db.load_presets().unwrap_or_else(|e| {
+            log::error!("{e}; starting without user presets");
+            Vec::new()
+        });
+        if user.is_empty()
+            && let Some(legacy) = import_legacy::<Vec<Preset>>(&config_dir.join("presets.json"))
+        {
+            match db.save_presets(&legacy) {
+                Ok(()) => user = legacy,
+                Err(e) => log::error!("Could not import presets: {e}"),
             }
-        };
-        *state.settings.lock().unwrap() = settings;
-        *state.user_presets.lock().unwrap() = user;
-        state
+        }
+
+        Self {
+            db,
+            settings: Mutex::new(settings),
+            user_presets: Mutex::new(user),
+            config_dir,
+            log_dir,
+            managed_bin_dir,
+            default_download_folder,
+        }
+    }
+}
+
+/// Read a pre-M4 JSON file and rename it so it's imported only once.
+fn import_legacy<T: serde::de::DeserializeOwned>(path: &Path) -> Option<T> {
+    match jsonfile::read::<T>(path) {
+        Ok(Some(v)) => {
+            let _ = std::fs::rename(path, path.with_extension("json.imported"));
+            log::info!("Imported {} into the database", path.display());
+            Some(v)
+        }
+        Ok(None) => None,
+        Err(e) => {
+            log::warn!("{e}; not imported");
+            None
+        }
     }
 }
 
@@ -92,7 +117,7 @@ pub fn save_settings(
     if settings.download_folder.trim().is_empty() {
         settings.download_folder = state.default_download_folder.clone();
     }
-    jsonfile::write(&state.settings_path(), &settings)?;
+    state.db.save_settings(&settings)?;
     *state.settings.lock().unwrap() = settings.clone();
     // A higher concurrency limit may allow more queued jobs to start now.
     engine.schedule();
@@ -167,6 +192,71 @@ pub fn get_job_log(engine: State<'_, Arc<Engine>>, id: String) -> Vec<String> {
     engine.log(&id)
 }
 
+// ---- History ---------------------------------------------------------------------------
+
+#[tauri::command]
+pub fn list_history(state: State<'_, AppState>, query: HistoryQuery) -> CmdResult<HistoryPage> {
+    state.db.history(&query)
+}
+
+#[tauri::command]
+pub fn delete_history(engine: State<'_, Arc<Engine>>, ids: Vec<String>) -> CmdResult<()> {
+    engine.delete_history(&ids)
+}
+
+#[tauri::command]
+pub fn clear_history(engine: State<'_, Arc<Engine>>) -> CmdResult<()> {
+    engine.clear_history()
+}
+
+/// Queue a new download with the same URL and options as a finished job.
+#[tauri::command]
+pub fn redownload(
+    state: State<'_, AppState>,
+    engine: State<'_, Arc<Engine>>,
+    id: String,
+) -> CmdResult<Job> {
+    let old = state.db.job(&id)?.ok_or("Job not found in history")?;
+    let mut created = engine.enqueue(vec![old.url], old.options, old.preset_name)?;
+    created.pop().ok_or_else(|| "Nothing was queued".into())
+}
+
+/// Write a plain-text diagnostics report (versions, settings, recent logs) to `path`.
+#[tauri::command]
+pub async fn export_diagnostics(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    engine: State<'_, Arc<Engine>>,
+    path: String,
+) -> CmdResult<()> {
+    let (y, f, d, settings) = {
+        let s = state.settings.lock().unwrap();
+        (
+            s.ytdlp_path.clone(),
+            s.ffmpeg_path.clone(),
+            s.deno_path.clone(),
+            s.clone(),
+        )
+    };
+    let dir = state.managed_bin_dir.clone();
+    let status =
+        tauri::async_runtime::spawn_blocking(move || binaries::engine_status(&y, &f, &d, &dir))
+            .await
+            .map_err(|e| e.to_string())?;
+    let app_log = read_app_log(state.clone(), Some(400))
+        .map(|l| l.lines)
+        .unwrap_or_default();
+    let report = crate::diagnostics::report(
+        &app.package_info().version.to_string(),
+        &status,
+        &settings,
+        &engine.list(),
+        &app_log,
+        |id| engine.log(id),
+    );
+    std::fs::write(&path, report).map_err(|e| format!("Could not write {path}: {e}"))
+}
+
 #[tauri::command]
 pub fn build_command(
     state: State<'_, AppState>,
@@ -215,7 +305,7 @@ pub fn save_preset(state: State<'_, AppState>, preset: Preset) -> CmdResult<Pres
     let mut user = state.user_presets.lock().unwrap();
     let mut next = user.clone();
     let saved = presets::upsert(&mut next, preset)?;
-    jsonfile::write(&state.presets_path(), &next)?;
+    state.db.save_presets(&next)?;
     *user = next;
     Ok(saved)
 }
@@ -225,7 +315,7 @@ pub fn delete_preset(state: State<'_, AppState>, id: String) -> CmdResult<()> {
     let mut user = state.user_presets.lock().unwrap();
     let mut next = user.clone();
     presets::remove(&mut next, &id)?;
-    jsonfile::write(&state.presets_path(), &next)?;
+    state.db.save_presets(&next)?;
     *user = next;
     Ok(())
 }
@@ -278,11 +368,17 @@ pub struct AppPaths {
     pub log_dir: String,
     pub managed_bin_dir: String,
     pub default_download_folder: String,
+    pub data_dir: String,
 }
 
 #[tauri::command]
 pub fn app_paths(state: State<'_, AppState>) -> AppPaths {
     AppPaths {
+        data_dir: state
+            .managed_bin_dir
+            .parent()
+            .map(|p| p.display().to_string())
+            .unwrap_or_default(),
         config_dir: state.config_dir.display().to_string(),
         log_dir: state.log_dir.display().to_string(),
         managed_bin_dir: state.managed_bin_dir.display().to_string(),

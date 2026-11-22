@@ -292,7 +292,10 @@ Optional: generate TS types from Rust (`ts-rs` or `tauri-specta`) so `lib/types.
 4. ✅ **M3. Manager.** Pause/resume (kill and restart, keeping partial files), auto-retry with backoff for transient errors (e.g. YouTube HTTP 403), reordering (B2, B5 part 1).
    Also delivered: pause all / resume all, error classification with friendly hints (the B8 list, pulled forward from M6), an auto-retry setting (0–5, default 3), and drag-and-drop reordering with a `jobs://order` event.
    Verified end to end: resuming continued from the partial file (9.9% → 9.9%, not 0), pausing left no processes running, a reordered job started first, a network error retried after 5s and then 20s, and an unavailable video failed without retrying.
-5. **M4. Persistence.** SQLite, history, per-job logs, startup recovery, graceful shutdown (B4).
+5. ✅ **M4. Persistence.** SQLite, history, per-job logs, startup recovery, graceful shutdown (B4).
+   Jobs are stored as a JSON blob plus indexed columns, so new `Job` fields need no migration. Writes ride on the existing 250 ms UI batch. "Clear finished" moves jobs to history instead of deleting them. The M1–M3 `settings.json`/`presets.json` files are imported once. "Export diagnostics" writes a text report with `%USERPROFILE%` redacted.
+   Bug found during E2E testing and fixed: a normal quit saved running jobs as *paused*, so "resume on startup" only worked after a crash. Shutdown now keeps the running status, so quit and crash share one recovery path (regression test added).
+   Verified across a real restart: a paused job kept its 10.0%; an interrupted job resumed by itself and continued at 5.2%; history, per-job logs and diagnostics survived; the close dialog appeared while downloading, and quitting left no processes.
 6. **M5. Playlists.** Probe + picker + grouped jobs (B5 part 2).
 7. **M6. Binaries.** First-run setup, managed downloads, yt-dlp updates, error classification (B6, B8).
 8. **M7. Release.** Tests, CI, installer testing, signing, README (Part C, A7).

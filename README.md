@@ -2,7 +2,7 @@
 
 A Windows desktop download manager for [yt-dlp](https://github.com/yt-dlp/yt-dlp), built with React + TypeScript, Tauri 2 and Rust.
 
-> **Status: milestones M0–M3 done.** Real downloads work, with live progress, pause/resume, cancel, automatic retry and reordering. The queue and history are not saved between sessions yet (M4). See [PLAN.md](PLAN.md) for the roadmap.
+> **Status: milestones M0–M4 done.** Real downloads work, with live progress, pause/resume, cancel, automatic retry and reordering. The queue, history, settings and per-download logs are saved in SQLite and survive restarts. See [PLAN.md](PLAN.md) for the roadmap.
 
 ## Features (current)
 
@@ -10,6 +10,9 @@ A Windows desktop download manager for [yt-dlp](https://github.com/yt-dlp/yt-dlp
 - **Pause / resume**: pausing stops yt-dlp but keeps the partial files; resuming continues where it stopped. Pause all / Resume all apply to the whole queue.
 - **Automatic retry**: temporary failures (network errors, HTTP 403/429/5xx) are retried after 5s, 20s, 60s… (0–5 attempts, set in Settings). Permanent errors (private or removed video, unsupported URL, …) fail right away with a short explanation of what to do.
 - **Reordering**: drag queued or paused downloads to change which one starts next.
+- **Saved between sessions**: the queue, settings and presets survive restarts. Downloads that were running when you quit resume automatically (a setting) and continue from their partial files. Closing the window while downloading asks first.
+- **History**: every finished, failed or canceled download, with search, a status filter, open folder, download again, per-download log and delete. "Clear finished" in the queue moves jobs here.
+- **Export diagnostics** (Logs or Settings): a text report with versions, settings and recent logs for bug reports, with your user folder replaced by `%USERPROFILE%`.
 - **Downloads view**: paste one or more URLs (Ctrl+Enter to add), cards with thumbnails, stats, and a live command preview.
 - **Configure view**: video or audio mode, quality cap, container, preferred codec, audio format and quality, subtitles, SponsorBlock, embedding toggles, output folder and filename template, fragments, retries, rate limit, browser cookies, and free-form custom arguments.
 - **Live command preview**: built by the same Rust function the engine will run (`src-tauri/src/args.rs`), shown as a copy-pasteable PowerShell command, with warnings for incompatible or dangerous options (e.g. `--exec`).
@@ -63,10 +66,10 @@ Installers are written to `src-tauri/target/release/bundle/nsis/` and `.../msi/`
 
 | What | Location |
 |---|---|
-| Settings and user presets | `%APPDATA%\com.tubedeck.desktop\` |
-| Application log | `%LOCALAPPDATA%\com.tubedeck.desktop\logs\tubedeck.log` |
+| Database (queue, history, settings, presets) | `%LOCALAPPDATA%\com.tubedeck.desktop\tubedeck.db` |
+| Application log / per-download logs | `%LOCALAPPDATA%\com.tubedeck.desktop\logs\tubedeck.log` / `logs\jobs\<id>.log` |
 | Managed binaries (put `yt-dlp.exe` / `deno.exe` here; auto-install in M6) | `%LOCALAPPDATA%\com.tubedeck.desktop\bin\` |
-| Partial downloads (per job, cleared on cancel/completion and at startup) | `%LOCALAPPDATA%\com.tubedeck.desktop\tmp\` |
+| Partial downloads (kept for queued/paused jobs; removed on completion, cancel or removal) | `%LOCALAPPDATA%\com.tubedeck.desktop\tmp\` |
 
 ## Project layout
 
@@ -79,7 +82,10 @@ src/                     React UI
 src-tauri/src/
   options.rs             DownloadOptions model
   args.rs                options → yt-dlp argv (single source of truth) + tests
-  presets.rs, settings.rs, jsonfile.rs
+  presets.rs, settings.rs
+  db.rs                  SQLite: jobs (queue + history), settings, presets, migrations
+  diagnostics.rs         text report for bug reports (profile path redacted)
+  jsonfile.rs            one-time import of the pre-M4 JSON files
   binaries.rs            locate yt-dlp / FFmpeg / Deno, read versions
   commands.rs            Tauri commands
   engine/

@@ -1,4 +1,5 @@
 import { useEffect, type ReactNode } from "react";
+import { CloseGuard } from "./components/CloseGuard";
 import { HistoryTable } from "./components/HistoryTable";
 import { LogViewer } from "./components/LogViewer";
 import { PresetList } from "./components/PresetList";
@@ -15,7 +16,7 @@ const VIEWS: Record<ViewId, { title: string; subtitle: string; render: () => Rea
   downloads: { title: "Downloads", subtitle: "Queue videos and playlists and follow their progress.", render: () => <DownloadsView /> },
   configure: { title: "Configure", subtitle: "Format, quality and advanced yt-dlp options, with a live command preview.", render: () => <ConfigureView /> },
   presets: { title: "Presets", subtitle: "Save and reuse your favourite download settings.", render: () => <PresetList /> },
-  history: { title: "History", subtitle: "Finished, failed and canceled downloads.", render: () => <HistoryTable /> },
+  history: { title: "History", subtitle: "Every finished, failed and canceled download, kept across restarts.", render: () => <HistoryTable /> },
   logs: { title: "Logs", subtitle: "Diagnostic output from TubeDeck and the download engine.", render: () => <LogViewer /> },
   settings: { title: "Settings", subtitle: "Appearance, folders and the yt-dlp engine.", render: () => <SettingsView /> },
 };
@@ -76,6 +77,7 @@ export default function App() {
         {v.render()}
       </main>
       <Toasts />
+      <CloseGuard />
     </div>
   );
 }

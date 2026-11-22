@@ -42,6 +42,7 @@ export interface Settings {
   downloadFolder: string;
   maxConcurrent: number;
   autoRetry: number;
+  resumeOnStartup: boolean;
   ytdlpPath: string;
   ffmpegPath: string;
   denoPath: string;
@@ -100,7 +101,20 @@ export interface AppLog {
   lines: string[];
 }
 
+export interface HistoryQuery {
+  search: string;
+  status: "all" | "completed" | "failed" | "canceled";
+  limit: number;
+  offset: number;
+}
+
+export interface HistoryPage {
+  items: Job[];
+  total: number;
+}
+
 export interface AppPaths {
+  dataDir: string;
   configDir: string;
   logDir: string;
   managedBinDir: string;

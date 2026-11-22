@@ -1,9 +1,9 @@
 //! Classify yt-dlp failures into actionable kinds and decide whether to retry automatically.
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ErrorKind {
     Network,

@@ -8,6 +8,8 @@ import type {
   BuiltCommand,
   DownloadOptions,
   EngineStatus,
+  HistoryPage,
+  HistoryQuery,
   Job,
   ParsedUrl,
   Preset,
@@ -48,7 +50,26 @@ export const api = {
   removeJob: (id: string) => call<void>("remove_job", { id }),
   clearFinishedJobs: () => call<void>("clear_finished_jobs"),
   getJobLog: (id: string) => call<string[]>("get_job_log", { id }),
+
+  listHistory: (query: HistoryQuery) => call<HistoryPage>("list_history", { query }),
+  deleteHistory: (ids: string[]) => call<void>("delete_history", { ids }),
+  clearHistory: () => call<void>("clear_history"),
+  redownload: (id: string) => call<Job>("redownload", { id }),
 };
+
+/** Ask where to save, then write the diagnostics report. Returns the path or null. */
+export async function exportDiagnostics(): Promise<string | null> {
+  if (!inDesktop) return null;
+  const { save } = await import("@tauri-apps/plugin-dialog");
+  const stamp = new Date().toISOString().slice(0, 16).replace(/[:T]/g, "-");
+  const path = await save({
+    defaultPath: `tubedeck-diagnostics-${stamp}.txt`,
+    filters: [{ name: "Text", extensions: ["txt"] }],
+  });
+  if (!path) return null;
+  await invoke("export_diagnostics", { path });
+  return path;
+}
 
 /** Subscribe to engine events. Returns an unsubscribe function. */
 export async function onJobEvents(handlers: {

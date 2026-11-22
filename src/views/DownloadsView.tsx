@@ -51,7 +51,7 @@ export function DownloadsView() {
                   <Play size={15} /> Resume all
                 </button>
               )}
-              <button className="secondary-button" onClick={clearFinished} disabled={!hasFinished}>
+              <button className="secondary-button" onClick={clearFinished} disabled={!hasFinished} title="Move finished downloads to History">
                 <Trash2 size={15} /> Clear finished
               </button>
             </>

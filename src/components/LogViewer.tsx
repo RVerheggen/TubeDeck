@@ -1,6 +1,6 @@
-import { FolderOpen, RefreshCw, ScrollText } from "lucide-react";
+import { FileDown, FolderOpen, RefreshCw, ScrollText } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { api, errorMessage, inDesktop, revealInExplorer } from "../lib/api";
+import { api, errorMessage, exportDiagnostics, inDesktop, revealInExplorer } from "../lib/api";
 import type { AppLog } from "../lib/types";
 import { useAppStore } from "../store/useAppStore";
 import { Panel } from "./ui";
@@ -10,6 +10,27 @@ function levelOf(line: string): string {
   if (line.includes("[WARN]")) return "warn";
   if (line.includes("[DEBUG]") || line.includes("[TRACE]")) return "debug";
   return "info";
+}
+
+export function ExportDiagnosticsButton() {
+  const toast = useAppStore((s) => s.toast);
+  const [busy, setBusy] = useState(false);
+  const run = async () => {
+    setBusy(true);
+    try {
+      const path = await exportDiagnostics();
+      if (path) toast("success", `Diagnostics saved to ${path}`);
+    } catch (e) {
+      toast("error", errorMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <button className="secondary-button" onClick={run} disabled={busy} title="Save a text report (versions, settings, recent logs) for a bug report">
+      <FileDown size={15} /> Export diagnostics
+    </button>
+  );
 }
 
 export function LogViewer() {
@@ -56,11 +77,12 @@ export function LogViewer() {
               <FolderOpen size={15} />
             </button>
           )}
+          {inDesktop && <ExportDiagnosticsButton />}
         </>
       }
     >
       <p className="muted">
-        {log?.path ? <code>{log.path}</code> : "Loading…"} · Per-download logs arrive with the download engine.
+        {log?.path ? <code>{log.path}</code> : "Loading…"} · Each download's own log is under the log button on its card or History row.
       </p>
       <div className="log-box" role="log">
         {lines.length === 0 ? (

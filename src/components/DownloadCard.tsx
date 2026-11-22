@@ -30,7 +30,7 @@ function useCountdown(at: number | null): number | null {
   return at == null ? null : Math.max(0, Math.ceil((at - now) / 1000));
 }
 
-function JobLog({ job }: { job: Job }) {
+export function JobLog({ job }: { job: Job }) {
   const [lines, setLines] = useState<string[]>([]);
   const box = useRef<HTMLDivElement>(null);
   const live = RUNNING.includes(job.status) || job.retryAt != null;
@@ -209,7 +209,12 @@ export function DownloadCard({ job }: { job: Job }) {
             </button>
           )}
           {!running && (
-            <button className="icon-button" title="Remove from list" aria-label="Remove" onClick={() => removeJob(job.id)}>
+            <button
+              className="icon-button"
+              title={job.status === "completed" || job.status === "failed" || job.status === "canceled" ? "Remove from queue (stays in History)" : "Remove and delete partial files"}
+              aria-label="Remove"
+              onClick={() => removeJob(job.id)}
+            >
               <X size={15} />
             </button>
           )}

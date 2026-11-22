@@ -8,6 +8,7 @@ import type { BuiltCommand, DownloadOptions, Job, Preset, Settings } from "./typ
 type Handlers = { updated: (jobs: Job[]) => void; removed: (ids: string[]) => void; order: (ids: string[]) => void };
 const subscribers = new Set<Handlers>();
 let jobs: Job[] = [];
+let archived: Job[] = [];
 let seq = 0;
 
 export function mockSubscribe(h: Handlers): () => void {
@@ -78,6 +79,7 @@ let settings: Settings = {
   downloadFolder: "C:\\Users\\you\\Downloads\\TubeDeck",
   maxConcurrent: 3,
   autoRetry: 3,
+  resumeOnStartup: true,
   ytdlpPath: "",
   ffmpegPath: "",
   denoPath: "",
@@ -212,14 +214,37 @@ export async function mock<T>(cmd: string, args?: Record<string, unknown>): Prom
     case "remove_job":
     case "clear_finished_jobs": {
       const ids = cmd === "remove_job" ? [a.id as string] : jobs.filter((j) => ["completed", "failed", "canceled"].includes(j.status)).map((j) => j.id);
+      archived.push(...jobs.filter((j) => ids.includes(j.id) && ["completed", "failed", "canceled"].includes(j.status)));
       jobs = jobs.filter((j) => !ids.includes(j.id));
       subscribers.forEach((s) => s.removed(ids));
       return r(undefined);
     }
     case "get_job_log":
       return r([`[TubeDeck] yt-dlp … -- ${jobs.find((j) => j.id === a.id)?.url ?? ""}`, "[youtube] Extracting URL (simulated)"]);
+    case "list_history": {
+      const q = a.query as { search: string; status: string; limit: number; offset: number };
+      const all = [...jobs.filter((j) => ["completed", "failed", "canceled"].includes(j.status)), ...archived]
+        .filter((j) => q.status === "all" || j.status === q.status)
+        .filter((j) => !q.search || `${j.title} ${j.url}`.toLowerCase().includes(q.search.toLowerCase()))
+        .sort((x, y) => (y.finishedAt ?? 0) - (x.finishedAt ?? 0));
+      return r({ items: all.slice(q.offset, q.offset + (q.limit || 50)), total: all.length });
+    }
+    case "delete_history":
+    case "clear_history": {
+      const ids = cmd === "clear_history" ? null : (a.ids as string[]);
+      const gone = (j: Job) => ["completed", "failed", "canceled"].includes(j.status) && (!ids || ids.includes(j.id));
+      const removed = jobs.filter(gone).map((j) => j.id);
+      jobs = jobs.filter((j) => !gone(j));
+      archived = archived.filter((j) => !gone(j));
+      if (removed.length) subscribers.forEach((s) => s.removed(removed));
+      return r(undefined);
+    }
+    case "redownload": {
+      const old = [...jobs, ...archived].find((j) => j.id === a.id)!;
+      return mock<T>("enqueue_jobs", { urls: [old.url], options: old.options, presetName: old.presetName }).then((c) => (c as unknown as Job[])[0] as T);
+    }
     case "app_paths":
-      return r({ configDir: "", logDir: "", managedBinDir: "", defaultDownloadFolder: settings.downloadFolder });
+      return r({ dataDir: "", configDir: "", logDir: "", managedBinDir: "", defaultDownloadFolder: settings.downloadFolder });
     default:
       return Promise.reject(`mock: unknown command ${cmd}`);
   }

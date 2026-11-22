@@ -22,6 +22,8 @@ pub struct Settings {
     pub max_concurrent: u32,
     /// Automatic retries for transient failures (network, HTTP 403/429/5xx). 0 = off.
     pub auto_retry: u32,
+    /// Resume downloads that were running or queued when TubeDeck closed.
+    pub resume_on_startup: bool,
     /// Optional explicit binary paths; empty = auto-detect.
     pub ytdlp_path: String,
     pub ffmpeg_path: String,
@@ -38,6 +40,7 @@ impl Default for Settings {
             download_folder: String::new(),
             max_concurrent: 3,
             auto_retry: 3,
+            resume_on_startup: true,
             ytdlp_path: String::new(),
             ffmpeg_path: String::new(),
             deno_path: String::new(),
