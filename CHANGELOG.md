@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.1.1 (unreleased)
+## 0.1.1 (2026-11-22)
 
 ### Fixed
 - "Install everything" could fail for one component with "Could not write …\.downloads\….part (os error 3)": the parallel installs shared a temporary folder that the first one to finish deleted. Each install now has its own.
