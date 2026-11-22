@@ -29,6 +29,9 @@ pub struct Settings {
     pub auto_update: bool,
     /// Last automatic update check (ms since epoch).
     pub last_update_check: u64,
+    /// TubeDeck version that ran last, to notice updates (also ones installed by a version
+    /// that didn't leave an "updated" note yet).
+    pub last_version: String,
     /// Optional explicit binary paths; empty = auto-detect.
     pub ytdlp_path: String,
     pub ffmpeg_path: String,
@@ -49,6 +52,7 @@ impl Default for Settings {
             ytdlp_channel: Channel::Stable,
             auto_update: true,
             last_update_check: 0,
+            last_version: String::new(),
             ytdlp_path: String::new(),
             ffmpeg_path: String::new(),
             deno_path: String::new(),

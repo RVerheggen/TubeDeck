@@ -35,6 +35,8 @@ pub struct AppState {
     pub log_dir: PathBuf,
     pub managed_bin_dir: PathBuf,
     pub default_download_folder: String,
+    /// Settings already existed in the database at startup (so this isn't a first run).
+    pub had_saved_settings: bool,
 }
 
 impl AppState {
@@ -48,8 +50,12 @@ impl AppState {
         managed_bin_dir: PathBuf,
         default_download_folder: String,
     ) -> Self {
+        let mut had_saved_settings = false;
         let mut settings = match db.load_settings() {
-            Ok(Some(s)) => s,
+            Ok(Some(s)) => {
+                had_saved_settings = true;
+                s
+            }
             Ok(None) => import_legacy::<Settings>(&config_dir.join("settings.json"))
                 .inspect(|s| {
                     if let Err(e) = db.save_settings(s) {
@@ -88,6 +94,7 @@ impl AppState {
             log_dir,
             managed_bin_dir,
             default_download_folder,
+            had_saved_settings,
         }
     }
 }
@@ -360,16 +367,55 @@ fn update_marker(state: &AppState) -> PathBuf {
 #[tauri::command]
 pub fn take_update_notice(app: AppHandle, state: State<'_, AppState>) -> Option<String> {
     let marker = update_marker(&state);
-    let old = std::fs::read_to_string(&marker).ok()?;
+    let marker_version = std::fs::read_to_string(&marker).ok();
     let _ = std::fs::remove_file(&marker);
-    let new = app.package_info().version.to_string();
-    let old = old.trim();
-    log::info!("Started after an update from {old} to {new}");
-    Some(if old == new || old.is_empty() {
-        format!("TubeDeck {new} is installed.")
-    } else {
-        format!("TubeDeck was updated from {old} to {new}.")
-    })
+    let current = app.package_info().version.to_string();
+
+    let notice = {
+        let mut s = state.settings.lock().unwrap();
+        let notice = update_notice(
+            marker_version.as_deref(),
+            &s.last_version,
+            state.had_saved_settings,
+            &current,
+        );
+        if s.last_version != current {
+            s.last_version = current.clone();
+            if let Err(e) = state.db.save_settings(&s) {
+                log::warn!("{e}");
+            }
+        }
+        notice
+    };
+    if let Some(n) = &notice {
+        log::info!("Started after an update: {n}");
+    }
+    notice
+}
+
+/// Decide whether this start follows an update, from (in order of trust): the note the
+/// previous version left before installing, the last version that ran, or, for installs
+/// from before versions were remembered (0.1.1 and older), saved settings existing at all.
+pub fn update_notice(
+    marker: Option<&str>,
+    last_version: &str,
+    had_saved_settings: bool,
+    current: &str,
+) -> Option<String> {
+    let from = marker
+        .map(str::trim)
+        .filter(|v| !v.is_empty() && *v != current)
+        .map(String::from)
+        .or_else(|| {
+            (!last_version.is_empty() && last_version != current).then(|| last_version.to_string())
+        });
+    match from {
+        Some(old) => Some(format!("TubeDeck was updated from {old} to {current}.")),
+        None if marker.is_some() || (last_version.is_empty() && had_saved_settings) => {
+            Some(format!("TubeDeck was updated to {current}."))
+        }
+        None => None,
+    }
 }
 
 // ---- Playlists -------------------------------------------------------------------------
@@ -620,5 +666,37 @@ mod tests {
         assert!(r[0].error.is_none());
         assert!(r[1].error.is_none());
         assert!(r[2].error.is_some());
+    }
+}
+
+#[cfg(test)]
+mod update_notice_tests {
+    use super::update_notice;
+
+    #[test]
+    fn detects_updates_from_marker_last_version_or_older_installs() {
+        // Note left by the previous version.
+        assert_eq!(
+            update_notice(Some("0.1.2"), "0.1.2", true, "0.1.3").as_deref(),
+            Some("TubeDeck was updated from 0.1.2 to 0.1.3.")
+        );
+        // No note, but the remembered version differs.
+        assert_eq!(
+            update_notice(None, "0.1.2", true, "0.1.3").as_deref(),
+            Some("TubeDeck was updated from 0.1.2 to 0.1.3.")
+        );
+        // Updating from 0.1.1, which neither left a note nor remembered its version.
+        assert_eq!(
+            update_notice(None, "", true, "0.1.2").as_deref(),
+            Some("TubeDeck was updated to 0.1.2.")
+        );
+        // Normal starts and a brand-new install: nothing to say.
+        assert_eq!(update_notice(None, "0.1.2", true, "0.1.2"), None);
+        assert_eq!(update_notice(None, "", false, "0.1.2"), None);
+        // A note from the same version (update failed and reinstalled same build).
+        assert_eq!(
+            update_notice(Some("0.1.2"), "0.1.2", true, "0.1.2").as_deref(),
+            Some("TubeDeck was updated to 0.1.2.")
+        );
     }
 }
