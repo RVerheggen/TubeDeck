@@ -126,8 +126,13 @@ export function SetupPanel() {
                 <span className="muted small">{c.required ? "required" : "recommended"}</span>
               </div>
               <small className="muted">{c.why}</small>
-              {p && (busy(p) || p.phase === "error") ? (
+              {p && busy(p) ? (
                 <InstallStatus progress={p} />
+              ) : p?.phase === "error" && !st.ok ? (
+                <>
+                  <InstallStatus progress={p} />
+                  <InstallButton id={c.id} label="Try again" />
+                </>
               ) : st.ok ? (
                 <small className="ok-text">v{st.version} · {st.source}</small>
               ) : (

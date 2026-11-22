@@ -1,6 +1,12 @@
 # Changelog
 
-## 0.1.0 (unreleased)
+## 0.1.1 (unreleased)
+
+### Fixed
+- "Install everything" could fail for one component with "Could not write …\.downloads\….part (os error 3)": the parallel installs shared a temporary folder that the first one to finish deleted. Each install now has its own.
+- Long error messages in the engine setup cards now wrap inside the card, and a failed install has a "Try again" button on its card.
+
+## 0.1.0 (2026-11-22)
 
 The first complete version of TubeDeck: a Windows download manager for yt-dlp.
 

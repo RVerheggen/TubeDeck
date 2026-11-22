@@ -212,6 +212,16 @@ pub async fn latest_tag(repo: &str) -> Result<String, String> {
         .ok_or_else(|| format!("Unexpected release URL: {location}"))
 }
 
+/// Private staging folder for one component's download and extraction.
+fn staging_dir(bin_dir: &Path, component: Component) -> PathBuf {
+    let name = match component {
+        Component::Ytdlp => "ytdlp",
+        Component::Ffmpeg => "ffmpeg",
+        Component::Deno => "deno",
+    };
+    bin_dir.join(".downloads").join(name)
+}
+
 /// Download, verify and install one component into `bin_dir`.
 pub async fn install(
     component: Component,
@@ -220,7 +230,11 @@ pub async fn install(
     mut progress: impl FnMut(InstallProgress),
 ) -> Result<(), String> {
     let src = source(component, channel);
-    let staging = bin_dir.join(".downloads");
+    // Each component gets its own staging folder: "Install everything" runs the three
+    // installs in parallel, and a shared folder was deleted by whichever finished first
+    // while another was still about to write into it (os error 3).
+    let staging = staging_dir(bin_dir, component);
+    let _ = fs::remove_dir_all(&staging); // leftovers from an interrupted attempt
     fs::create_dir_all(&staging)
         .map_err(|e| format!("Could not create {}: {e}", staging.display()))?;
     let report = |phase, downloaded, total, message: Option<String>| InstallProgress {
@@ -313,9 +327,8 @@ pub async fn install(
             swap_dir(&dir, &bin_dir.join("ffmpeg"))
         }
     };
-    let _ = fs::remove_file(&part);
-    // Only succeeds when empty, so a parallel install's files are left alone.
-    let _ = fs::remove_dir(&staging);
+    // Remove only this install's own folder; the shared parent is tidied at startup.
+    let _ = fs::remove_dir_all(&staging);
     result?;
     progress(report("done", downloaded, total, None));
     Ok(())
@@ -534,6 +547,57 @@ mod tests {
             source(Component::Ytdlp, Channel::Nightly).repo,
             "yt-dlp/yt-dlp-nightly-builds"
         );
+    }
+
+    /// Real downloads (≈155 MB): all three installs in parallel into a temp folder, twice,
+    /// like "Install everything". Run with `cargo test -- --ignored parallel_install_real`.
+    #[tokio::test]
+    #[ignore = "downloads from GitHub"]
+    async fn parallel_install_real_network() {
+        let bin = std::env::temp_dir().join(format!("tubedeck-install-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&bin);
+        fs::create_dir_all(&bin).unwrap();
+        for round in 1..=2 {
+            let run = |c| install(c, Channel::Stable, &bin, |_| {});
+            let (y, f, d) = tokio::join!(
+                run(Component::Ytdlp),
+                run(Component::Ffmpeg),
+                run(Component::Deno)
+            );
+            assert!(
+                y.is_ok() && f.is_ok() && d.is_ok(),
+                "round {round}: {y:?} {f:?} {d:?}"
+            );
+            assert!(bin.join("yt-dlp.exe").is_file() && bin.join("deno.exe").is_file());
+            assert!(
+                bin.join("ffmpeg").join("ffmpeg.exe").is_file()
+                    && bin.join("ffmpeg").join("ffprobe.exe").is_file()
+            );
+            let leftovers: Vec<_> = fs::read_dir(bin.join(".downloads"))
+                .map(|r| r.flatten().map(|e| e.file_name()).collect())
+                .unwrap_or_default();
+            assert!(
+                leftovers.is_empty(),
+                "round {round}: staging leftovers {leftovers:?}"
+            );
+        }
+        let _ = fs::remove_dir_all(&bin);
+    }
+
+    /// Regression: "Install everything" runs installs in parallel. One install finishing
+    /// must not remove the folder another install is about to write its download into.
+    #[test]
+    fn parallel_installs_do_not_share_staging() {
+        let bin = std::env::temp_dir().join(format!("tubedeck-staging-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&bin);
+        let ytdlp = staging_dir(&bin, Component::Ytdlp);
+        let deno = staging_dir(&bin, Component::Deno);
+        assert_ne!(ytdlp, deno);
+        fs::create_dir_all(&ytdlp).unwrap();
+        fs::create_dir_all(&deno).unwrap(); // deno created its folder, no file yet
+        fs::remove_dir_all(&ytdlp).unwrap(); // yt-dlp finishes and cleans up
+        fs::write(deno.join("deno.zip.part"), b"x").expect("deno can still write its download");
+        let _ = fs::remove_dir_all(&bin);
     }
 
     #[test]

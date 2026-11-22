@@ -163,6 +163,11 @@ export async function mock<T>(cmd: string, args?: Record<string, unknown>): Prom
     }
     case "install_binary": {
       const component = a.component as "ytdlp" | "ffmpeg" | "deno";
+      if (component === "deno" && location.search.includes("failDeno") && !installed.has("deno-tried")) {
+        installed.add("deno-tried");
+        await new Promise((res) => setTimeout(res, 400));
+        throw "Could not write C:\Users\you\AppData\Local\com.tubedeck.desktop\bin\.downloads\deno-x86_64-pc-windows-msvc.zip.part: The system cannot find the path specified. (os error 3)";
+      }
       const total = { ytdlp: 23_600_000, ffmpeg: 91_000_000, deno: 42_900_000 }[component];
       const send = (p: Partial<import("./types").InstallProgress>) =>
         engineSubs.forEach((s) => s.install({ component, phase: "downloading", downloaded: 0, total, message: null, ...p }));
