@@ -25,6 +25,10 @@ const STDERR_TAIL: usize = 40;
 /// arguments so they win if a custom argument conflicts.
 pub fn engine_args(temp_dir: &Path, ffmpeg: Option<&Path>, deno: Option<&Path>) -> Vec<String> {
     let mut a: Vec<String> = [
+        // yt-dlp.exe ignores PYTHONIOENCODING/PYTHONUTF8 and writes piped output in the
+        // ANSI code page, which garbles titles like "A – B" in printed file paths.
+        "--encoding",
+        "utf-8",
         "--newline",
         "--progress",
         "--progress-delta",
@@ -99,7 +103,8 @@ pub(crate) fn tools(state: &AppState) -> Result<Tools, String> {
     })
 }
 
-/// A tokio command for yt-dlp: UTF-8 output, no console window, piped output.
+/// A tokio command for yt-dlp: no console window, piped output. The environment asks for
+/// UTF-8, but the frozen yt-dlp.exe ignores it; callers also pass `--encoding utf-8`.
 pub(crate) fn command(program: &Path, args: &[String]) -> Command {
     let mut cmd = Command::new(program);
     cmd.args(args)
@@ -358,6 +363,8 @@ mod tests {
             Some(Path::new(r"C:\bin\deno.exe")),
         );
         assert!(a.contains(&"--no-simulate".to_string()));
+        let e = a.iter().position(|x| x == "--encoding").unwrap();
+        assert_eq!(a[e + 1], "utf-8");
         assert!(a.iter().any(|x| x.starts_with("download:TD_PROG ")));
         assert!(a.iter().any(|x| x.starts_with("postprocess:TD_PP ")));
         assert!(a.iter().any(|x| x.starts_with("before_dl:TD_INFO ")));

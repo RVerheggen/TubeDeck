@@ -382,6 +382,7 @@ const MANAGED: &[&str] = &[
     "--no-js-runtimes",
     "-a",
     "--batch-file",
+    "--encoding",
     "-U",
     "--update",
     "--update-to",

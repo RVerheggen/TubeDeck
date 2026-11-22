@@ -133,8 +133,8 @@ export async function pickFolder(defaultPath?: string): Promise<string | null> {
 
 export async function revealInExplorer(path: string): Promise<void> {
   if (!inDesktop) return;
-  const { revealItemInDir } = await import("@tauri-apps/plugin-opener");
-  await revealItemInDir(path);
+  // Falls back to the folder when the file was moved, deleted or saved under a garbled name.
+  await invoke("reveal_path", { path });
 }
 
 export function errorMessage(e: unknown): string {

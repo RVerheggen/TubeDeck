@@ -159,10 +159,17 @@ impl Probes {
 }
 
 pub fn probe_args(url: &str, tools: &Tools, cookies: Option<Browser>) -> Vec<String> {
-    let mut a: Vec<String> = ["-J", "--flat-playlist", "--color", "never"]
-        .iter()
-        .map(|x| x.to_string())
-        .collect();
+    let mut a: Vec<String> = [
+        "--encoding",
+        "utf-8",
+        "-J",
+        "--flat-playlist",
+        "--color",
+        "never",
+    ]
+    .iter()
+    .map(|x| x.to_string())
+    .collect();
     if let Some(d) = &tools.deno {
         a.push("--js-runtimes".into());
         a.push(format!("deno:{}", d.display()));

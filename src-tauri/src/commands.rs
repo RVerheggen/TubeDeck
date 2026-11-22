@@ -654,6 +654,66 @@ pub fn app_paths(state: State<'_, AppState>) -> AppPaths {
     }
 }
 
+/// What "Show in folder" should open for a saved path.
+#[derive(Debug, PartialEq)]
+pub enum RevealTarget {
+    /// Select this file in Explorer.
+    File(PathBuf),
+    /// The file is gone; open the closest folder that still exists.
+    Folder(PathBuf),
+}
+
+/// Find what to show for `path`. Downloads saved by 0.1.2 and older could store file names
+/// with "�" where yt-dlp wrote non-ASCII characters in the ANSI code page; those match
+/// the real file when exactly one file in the folder fits (each � = one character).
+pub fn reveal_target(path: &Path) -> Option<RevealTarget> {
+    if path.exists() {
+        return Some(RevealTarget::File(path.to_path_buf()));
+    }
+    let parent = path.parent()?;
+    let name = path.file_name()?.to_string_lossy();
+    if name.contains(char::REPLACEMENT_CHARACTER) && parent.is_dir() {
+        let mut hits = std::fs::read_dir(parent)
+            .ok()?
+            .flatten()
+            .map(|e| e.path())
+            .filter(|p| {
+                p.file_name()
+                    .is_some_and(|n| matches_mangled(&name, &n.to_string_lossy()))
+            });
+        if let (Some(hit), None) = (hits.next(), hits.next()) {
+            return Some(RevealTarget::File(hit));
+        }
+    }
+    path.ancestors()
+        .skip(1)
+        .find(|p| p.is_dir())
+        .map(|p| RevealTarget::Folder(p.to_path_buf()))
+}
+
+/// `pattern` with each U+FFFD matching any single character.
+fn matches_mangled(pattern: &str, name: &str) -> bool {
+    let (p, n): (Vec<char>, Vec<char>) = (pattern.chars().collect(), name.chars().collect());
+    p.len() == n.len()
+        && p.iter()
+            .zip(&n)
+            .all(|(a, b)| *a == char::REPLACEMENT_CHARACTER || a == b)
+}
+
+/// Show a downloaded file in Explorer, or its folder when the file is gone.
+#[tauri::command]
+pub fn reveal_path(path: String) -> Result<(), String> {
+    match reveal_target(Path::new(&path)) {
+        Some(RevealTarget::File(p)) => {
+            tauri_plugin_opener::reveal_item_in_dir(p).map_err(|e| e.to_string())
+        }
+        Some(RevealTarget::Folder(p)) => {
+            tauri_plugin_opener::open_path(p, None::<&str>).map_err(|e| e.to_string())
+        }
+        None => Err(format!("{path} no longer exists.")),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -666,6 +726,33 @@ mod tests {
         assert!(r[0].error.is_none());
         assert!(r[1].error.is_none());
         assert!(r[2].error.is_some());
+    }
+
+    #[test]
+    fn reveal_finds_mangled_names_and_falls_back_to_the_folder() {
+        let dir = std::env::temp_dir().join(format!("td-reveal-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let real = dir.join("A – B [id].mp3");
+        std::fs::write(&real, b"x").unwrap();
+        std::fs::write(dir.join("A – C [id].mp3"), b"x").unwrap();
+
+        assert_eq!(reveal_target(&real), Some(RevealTarget::File(real.clone())));
+        // Stored by an older version with the en dash garbled.
+        assert_eq!(
+            reveal_target(&dir.join("A � B [id].mp3")),
+            Some(RevealTarget::File(real.clone()))
+        );
+        // Ambiguous or simply missing: open the folder instead.
+        assert_eq!(
+            reveal_target(&dir.join("A � � [id].mp3")),
+            Some(RevealTarget::Folder(dir.clone()))
+        );
+        assert_eq!(
+            reveal_target(&dir.join("gone").join("x.mp3")),
+            Some(RevealTarget::Folder(dir.clone()))
+        );
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 }
 
