@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.3 (2026-11-23)
 
 ### Fixed
 - Titles with characters such as "–", accents or emoji were saved correctly, but TubeDeck recorded a garbled path, so "Show in folder" failed with "path doesn't exist". yt-dlp now reports paths in UTF-8.
