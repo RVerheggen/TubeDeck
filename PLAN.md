@@ -309,9 +309,16 @@ Optional: generate TS types from Rust (`ts-rs` or `tauri-specta`) so `lib/types.
    - **Daily auto-update:** updates the managed yt-dlp at startup (setting, default on).
    - **Found during E2E testing and fixed:** a transient "error sending request" when three downloads started at once, now retried with backoff and reported with the full error chain; and a staging folder left behind.
    - **Verified on a simulated clean machine** (no yt-dlp or Deno): one-click install of all three in about 5 s; managed copies take precedence over PATH; a real download used them; stable → nightly → stable worked; the startup auto-update replaced nightly with stable 2 s after launch.
-8. **M7. Release.** Tests, CI, installer testing, signing, README (Part C, A7).
+8. ✅ **M7. Release.** Tests, CI, installer testing, signing, README (Part C, A7).
+   - **CI:** `ci.yml` runs on Windows for every push and PR (npm tests and build, rustfmt, clippy, cargo test). `release.yml` builds the installers on a `v*` tag, checks the tag matches the app version, and attaches the installers to a **draft** GitHub release.
+   - **Installer:** a new TubeDeck icon and bundle metadata. The NSIS installer installs per user with no admin rights (4.0 MB; the MSI is 5.3 MB).
+   - **Verified on the installed release build:** silent install, smoke test (bundled UI and font, engine, playlist probe, a real download, thumbnails under the release CSP), clean close, and silent uninstall, which removes the program, shortcut and registry entry and keeps user data.
+   - **Docs:** `docs/TESTING.md` (automated plus manual release checklist), `CHANGELOG.md`, and a restructured README.
+   - **Not done (needs your input):** code signing (needs a certificate) and TubeDeck self-update via `tauri-plugin-updater` (needs an update-signing key stored as a GitHub secret). Both are listed under Open decisions.
 
 ## Open decisions
-- **Binary strategy.** Recommended: managed download into app data with PATH fallback. The alternative is PATH-only (simpler, but worse for non-technical users).
-- **Cookies support** (`--cookies-from-browser`) in v1, or later? It's needed for age-restricted and bot-check content.
-- **Distribution.** Personal use (unsigned is fine) or public (budget for a code-signing certificate)?
+- ~~**Binary strategy.**~~ Decided and done (M6): managed download into app data with PATH fallback.
+- ~~**Cookies support.**~~ Done (M1): `--cookies-from-browser` in Configure → Advanced, suggested by the bot-check error hint.
+- **Distribution.** Personal use (unsigned is fine) or public (budget for a code-signing certificate, e.g. Azure Trusted Signing or an OV certificate)? Signing can then be added to the release workflow.
+- **TubeDeck self-update.** `tauri-plugin-updater` with update files on GitHub releases. Needs an update-signing key pair, with the private key stored as a GitHub Actions secret.
+- **First public version number.** The app is at 0.1.0. Tag `v0.1.0` to produce a draft release, or bump to 1.0.0 first.

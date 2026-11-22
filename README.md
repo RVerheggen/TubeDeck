@@ -2,27 +2,46 @@
 
 A Windows desktop download manager for [yt-dlp](https://github.com/yt-dlp/yt-dlp), built with React + TypeScript, Tauri 2 and Rust.
 
-> **Status: milestones M0–M6 done.** Real downloads work, with live progress, pause/resume, cancel, automatic retry, reordering and a playlist picker. The queue, history, settings and per-download logs are saved in SQLite and survive restarts. yt-dlp, FFmpeg and Deno install with one click and yt-dlp keeps itself up to date. See [PLAN.md](PLAN.md) for the roadmap.
+Paste a video, playlist or channel URL, pick a preset, and TubeDeck downloads in parallel with live progress, pause/resume and automatic retries. It sets up yt-dlp, FFmpeg and Deno for you and keeps yt-dlp current.
 
-## Features (current)
+**Status:** feature-complete for 0.1.0 (milestones M0–M7 in [PLAN.md](PLAN.md)). See [CHANGELOG.md](CHANGELOG.md).
 
-- **Download engine** (Rust): runs yt-dlp with no console window and parallel downloads up to your limit (changes apply immediately). Shows live percent, speed, ETA, stream (video/audio) and post-processing stage. Cancel stops the whole process tree (yt-dlp, its Python child and ffmpeg) and deletes the job's temp files. Failed jobs can be retried, and each job keeps a log of yt-dlp's output.
-- **Pause / resume**: pausing stops yt-dlp but keeps the partial files; resuming continues where it stopped. Pause all / Resume all apply to the whole queue.
-- **Automatic retry**: temporary failures (network errors, HTTP 403/429/5xx) are retried after 5s, 20s, 60s… (0–5 attempts, set in Settings). Permanent errors (private or removed video, unsupported URL, …) fail right away with a short explanation of what to do.
-- **Reordering**: drag queued or paused downloads to change which one starts next.
-- **Saved between sessions**: the queue, settings and presets survive restarts. Downloads that were running when you quit resume automatically (a setting) and continue from their partial files. Closing the window while downloading asks first.
-- **History**: every finished, failed or canceled download, with search, a status filter, open folder, download again, per-download log and delete. "Clear finished" in the queue moves jobs here.
-- **Playlists**: playlist and channel URLs open a picker listing every item (thumbnail, title, duration). Choose items with a filter, ranges like `1-10, 15, 20-`, or shift+click, and open nested playlists. Each item becomes its own download, grouped under a collapsible playlist header, and is saved as `<Playlist>\NN - <title>`. "Pick items…" inspects any URL first.
-- **Export diagnostics** (Logs or Settings): a text report with versions, settings and recent logs for bug reports, with your user folder replaced by `%USERPROFILE%`.
-- **Downloads view**: paste one or more URLs (Ctrl+Enter to add), cards with thumbnails, stats, and a live command preview.
-- **Configure view**: video or audio mode, quality cap, container, preferred codec, audio format and quality, subtitles, SponsorBlock, embedding toggles, output folder and filename template, fragments, retries, rate limit, browser cookies, and free-form custom arguments.
-- **Live command preview**: built by the same Rust function the engine will run (`src-tauri/src/args.rs`), shown as a copy-pasteable PowerShell command, with warnings for incompatible or dangerous options (e.g. `--exec`).
-- **Presets**: 5 built-ins plus your own (save, rename, overwrite, delete).
-- **Themes**: dark, light, or follow Windows. Fonts are bundled, so the app needs no network to render.
-- **Engine setup and updates**: on a PC without yt-dlp, FFmpeg or Deno, the Downloads view offers to install them with one click (about 155 MB in total). Files come from the official GitHub releases and are refused unless they match the published SHA-256 checksums. Settings → Engine shows versions, checks for updates, and switches yt-dlp between stable and nightly. yt-dlp updates itself once a day (setting). Lookup order: configured path → TubeDeck's managed folder → PATH.
-- **Logs view**: the application log, with a filter.
+## Install
 
-## Prerequisites (Windows)
+1. Download `TubeDeck_<version>_x64-setup.exe` from the repository's GitHub releases (or build it yourself, see below).
+2. Run it. It installs for your user only and needs no administrator rights. The installer isn't code-signed yet, so Windows SmartScreen warns the first time: click **More info → Run anyway**.
+3. On first start, click **Install everything** to set up yt-dlp, FFmpeg and Deno (about 155 MB, verified against their published checksums).
+
+## Features
+
+**Downloading**
+- Parallel downloads up to a limit you choose (changes apply immediately), with live percent, speed, ETA, stream (video/audio) and post-processing stage.
+- Pause and resume (continues from the partial file), cancel (stops yt-dlp, its helper process and FFmpeg, and removes partial files), retry, and drag-and-drop reordering. Pause all / Resume all.
+- Automatic retry for temporary failures (network errors, HTTP 403/429/5xx) after 5s, 20s, 60s… (0–5 attempts). Permanent errors fail right away with a short explanation of what to do.
+- Each download keeps a log of yt-dlp's output.
+
+**Playlists**
+- Playlist and channel URLs open a picker listing every item (thumbnail, title, duration). Select with a filter, ranges like `1-10, 15, 20-`, or shift+click, and open nested playlists.
+- Each item becomes its own download, grouped under a collapsible playlist header, saved as `<Playlist>\NN - <title>`. "Pick items…" inspects any URL first.
+
+**Configuration**
+- Video or audio mode, quality cap, container, preferred codec, audio format and quality, subtitles, SponsorBlock, embedding, output folder and filename template, fragments, retries, rate limit, browser cookies, and free-form custom arguments.
+- Live command preview: the exact yt-dlp command TubeDeck runs (built by the same Rust code), with copy and warnings for incompatible or dangerous options such as `--exec`.
+- 5 built-in presets plus your own. Dark, light or system theme. Fonts are bundled, so the app needs no network to render.
+
+**Saved between sessions**
+- Queue, history, settings, presets and per-download logs live in a local SQLite database.
+- Downloads running when you quit resume on the next start (setting). Closing the window while downloading asks first.
+- History with search, status filter, open folder, download again, log and delete. "Clear finished" in the queue moves downloads there.
+
+**Engine**
+- One-click install of yt-dlp, FFmpeg and Deno from their official GitHub releases. Files are refused unless they match the published SHA-256 checksums.
+- Settings → Engine: versions, update check, stable/nightly yt-dlp channel, daily yt-dlp auto-update. Lookup order: configured path → TubeDeck's managed folder → PATH.
+- Logs view and **Export diagnostics**: a text report for bug reports, with your user folder replaced by `%USERPROFILE%`.
+
+## Develop
+
+Prerequisites (Windows):
 
 | Tool | Notes |
 |---|---|
@@ -31,34 +50,42 @@ A Windows desktop download manager for [yt-dlp](https://github.com/yt-dlp/yt-dlp
 | Microsoft C++ Build Tools | Visual Studio Installer → "Desktop development with C++" |
 | WebView2 Runtime | Already included in Windows 11 |
 
-You don't need to install yt-dlp, FFmpeg or Deno yourself: TubeDeck offers to install them on first run. Copies you already have on PATH, or set in Settings, are used if no managed copy exists.
-
-## Develop
-
 ```powershell
 npm install
 npm run tauri dev
 ```
 
-`npm run dev` on its own serves the UI in a normal browser with a mocked backend, which is handy for styling work.
+`npm run dev` on its own serves the UI in a normal browser with a simulated backend, which is handy for styling work.
 
 ## Test
 
 ```powershell
-npm test
+npm test; npm run build
 ```
 
 ```powershell
-cd src-tauri; cargo test; cargo clippy --all-targets -- -D warnings
+cd src-tauri; cargo fmt --check; cargo clippy --all-targets -- -D warnings; cargo test
 ```
 
-## Build the installer
+CI runs the same checks on Windows for every push and pull request (`.github/workflows/ci.yml`). The manual release checklist is in [docs/TESTING.md](docs/TESTING.md).
+
+## Build and release
 
 ```powershell
 npm run tauri build
 ```
 
-Installers are written to `src-tauri/target/release/bundle/nsis/` and `.../msi/`. The installers are unsigned, so Windows SmartScreen will warn on first run.
+The installers are written to `src-tauri/target/release/bundle/nsis/` (`-setup.exe`, per-user) and `.../msi/`.
+
+To publish a release:
+1. Bump `version` in `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml` and `package.json`, and update `CHANGELOG.md`.
+2. Commit, then push a matching tag:
+
+```powershell
+git tag v0.1.0; git push origin v0.1.0
+```
+
+3. `.github/workflows/release.yml` builds the installers and attaches them to a **draft** GitHub release. Review it and publish.
 
 ## Where things are stored
 

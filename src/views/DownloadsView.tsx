@@ -7,26 +7,8 @@ import { GroupCard } from "../components/GroupCard";
 import { SetupPanel } from "../components/SetupPanel";
 import { StatsGrid } from "../components/StatsGrid";
 import { EmptyState, Panel } from "../components/ui";
-import type { Job } from "../lib/types";
+import { groupJobs } from "../lib/queue";
 import { useAppStore } from "../store/useAppStore";
-
-type QueueEntry = { job: Job } | { groupId: string; jobs: Job[] };
-
-/** Playlist items are shown together under one header, at the position of their first item. */
-function groupJobs(jobs: Job[]): QueueEntry[] {
-  const groups = new Map<string, Job[]>();
-  for (const j of jobs) if (j.group) groups.set(j.group.id, [...(groups.get(j.group.id) ?? []), j]);
-  const out: QueueEntry[] = [];
-  const seen = new Set<string>();
-  for (const j of jobs) {
-    if (!j.group) out.push({ job: j });
-    else if (!seen.has(j.group.id)) {
-      seen.add(j.group.id);
-      out.push({ groupId: j.group.id, jobs: groups.get(j.group.id)! });
-    }
-  }
-  return out;
-}
 
 export function DownloadsView() {
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
