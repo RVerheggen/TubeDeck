@@ -27,6 +27,8 @@ jobs:
     name: Check version and existing releases
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    outputs:
+      notes: ${{ steps.notes.outputs.body }}
     steps:
       - uses: actions/checkout@v5
       - name: Refuse versions that already have a release (published or draft)
@@ -39,7 +41,16 @@ jobs:
         run: |
           export VERSION=$(jq -r .version src-tauri/tauri.conf.json)
           bash .github/scripts/check-release.sh
-          bash .github/scripts/release-notes.sh --check "$VERSION"
+      # Made here on Linux (not on the Windows build runner) and handed to the build job.
+      # Fails when CHANGELOG.md has no section for this version.
+      - name: Release notes from CHANGELOG.md
+        id: notes
+        run: |
+          {
+            echo "body<<END_OF_RELEASE_NOTES"
+            bash .github/scripts/release-notes.sh "$(jq -r .version src-tauri/tauri.conf.json)"
+            echo "END_OF_RELEASE_NOTES"
+          } >> "$GITHUB_OUTPUT"
 
   test:
     needs: preflight
@@ -69,16 +80,6 @@ jobs:
       - name: Install npm dependencies
         run: npm ci
 
-      - name: Release notes from CHANGELOG.md
-        id: notes
-        shell: bash
-        run: |
-          {
-            echo "body<<END_OF_RELEASE_NOTES"
-            bash .github/scripts/release-notes.sh "$(jq -r .version src-tauri/tauri.conf.json)"
-            echo "END_OF_RELEASE_NOTES"
-          } >> "$GITHUB_OUTPUT"
-
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -94,7 +95,7 @@ jobs:
           # This version's CHANGELOG.md section plus install instructions. (It's also copied
           # into latest.json; the app itself lists the changelog entries since the installed
           # version instead.)
-          releaseBody: ${{ steps.notes.outputs.body }}
+          releaseBody: ${{ needs.preflight.outputs.notes }}
           releaseDraft: true
           prerelease: false
           includeUpdaterJson: true
