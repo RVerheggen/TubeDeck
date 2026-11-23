@@ -3,6 +3,7 @@ import { useState } from "react";
 import { api, errorMessage } from "../lib/api";
 import { useAppStore } from "../store/useAppStore";
 import { looksLikePlaylist } from "../lib/playlist";
+import { presetState } from "../lib/presets";
 import { optionsSummary } from "../lib/summary";
 import { Panel } from "./ui";
 
@@ -16,6 +17,11 @@ export function AddUrlPanel() {
   const applyPreset = useAppStore((s) => s.applyPreset);
   const openPicker = useAppStore((s) => s.openPicker);
   const [busy, setBusy] = useState(false);
+
+  // When the options were changed after applying a preset (for example Audio MP3, then
+  // "Video" in Configure), show "Custom" so the list doesn't claim the preset is in use and
+  // choosing that preset again re-applies it.
+  const { preset: activePreset, modified } = presetState(settings, presets);
 
   const lineCount = draft.split(/\s+/).filter(Boolean).length;
 
@@ -68,11 +74,11 @@ export function AddUrlPanel() {
         <div className="quick-settings">
           <select
             className="compact"
-            value={settings.activePresetId ?? ""}
+            value={modified ? "" : (settings.activePresetId ?? "")}
             onChange={(e) => e.target.value && applyPreset(e.target.value)}
             aria-label="Preset"
           >
-            <option value="">Custom settings</option>
+            <option value="">{modified && activePreset ? `Custom (changed from ${activePreset.name})` : "Custom settings"}</option>
             {presets.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.name}

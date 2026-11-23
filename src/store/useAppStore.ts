@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { api, errorMessage, onEngineEvents, onJobEvents } from "../lib/api";
+import { jobPresetName, sameOptions } from "../lib/presets";
 import { afterUpdate, appVersion, checkAppUpdate, installAppUpdate, type AppUpdateInfo } from "../lib/appUpdate";
 import type {
   Component,
@@ -84,9 +85,7 @@ const SAVE_DELAY_MS = 400;
 let saveTimer: ReturnType<typeof setTimeout> | undefined;
 let toastSeq = 0;
 
-export function sameOptions(a: DownloadOptions, b: DownloadOptions): boolean {
-  return (Object.keys(a) as (keyof DownloadOptions)[]).every((k) => a[k] === b[k]);
-}
+export { sameOptions };
 
 let initStarted = false;
 
@@ -298,7 +297,7 @@ export const useAppStore = create<AppState>((set, get) => {
     enqueue: async (urls, overrides) => {
       const s = get().settings;
       if (!s || urls.length === 0) return;
-      const presetName = get().presets.find((p) => p.id === s.activePresetId)?.name ?? null;
+      const presetName = jobPresetName(s, get().presets);
       try {
         const created = await api.enqueueJobs(urls, { ...s.currentOptions, ...overrides }, presetName);
         get().applyJobUpdates(created);

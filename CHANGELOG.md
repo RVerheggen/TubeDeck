@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+- The preset list on the Downloads page kept showing a preset such as "Audio MP3" after its settings were changed (for example to Video in Configure), so downloads came out as MP4. It now shows "Custom (changed from Audio MP3)", and choosing the preset again re-applies it. Such downloads are labelled "Audio MP3 (modified)".
+
 ## 0.1.3 (2026-11-23)
 
 ### Fixed

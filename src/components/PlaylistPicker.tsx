@@ -2,6 +2,7 @@ import { ArrowLeft, CheckSquare, Film, FolderTree, ListOrdered, ListVideo, Loade
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api, errorMessage } from "../lib/api";
 import { formatDuration, isVideoInPlaylist, parseRange } from "../lib/playlist";
+import { jobPresetName } from "../lib/presets";
 import type { ProbeEntry, ProbeResult } from "../lib/types";
 import { useAppStore } from "../store/useAppStore";
 import { Toggle } from "./ui";
@@ -69,7 +70,7 @@ function Picker({ initialUrl }: { initialUrl: string }) {
   const visible = q ? entries.filter((e) => e.title.toLowerCase().includes(q)) : entries;
   const chosen = selectable.filter((e) => selected.has(e.index));
   const totalSeconds = chosen.reduce((s, e) => s + (e.duration ?? 0), 0);
-  const presetName = presets.find((p) => p.id === settings.activePresetId)?.name ?? null;
+  const presetName = jobPresetName(settings, presets);
 
   const toggle = (e: ProbeEntry, shift: boolean) => {
     const next = new Set(selected);
