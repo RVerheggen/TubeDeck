@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.5 (2026-11-24)
 
 ### Changed
 - The update dialog lists what changed since your version (from the changelog), with a link to the full changelog, instead of the generic release text.
