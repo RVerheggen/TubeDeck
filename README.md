@@ -78,10 +78,10 @@ npm run tauri build
 The installers are written to `src-tauri/target/release/bundle/nsis/` (`-setup.exe`, per-user) and `.../msi/`. A local build without the signing key works but skips the updater signature.
 
 To publish a release:
-1. Bump `version` in `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml` and `package.json`, and update `CHANGELOG.md`.
+1. Bump `version` in `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml` and `package.json`, and add a `## <version> (date)` section to `CHANGELOG.md`. That section becomes the release notes, and the app shows it in the update dialog.
 2. Commit and push to `main`, then on GitHub open **Actions → Release → Run workflow** (branch `main`). The workflow creates the `v<version>` tag itself. Pushing a tag (`git tag v0.1.2; git push origin v0.1.2`) also works, but GitHub keeps build caches per tag, so tag-started builds always compile from scratch. Releases started from `main` reuse the previous build's cache.
-3. `.github/workflows/release.yml` first checks that this version has no release yet, published or draft, and stops within seconds if it does. It then runs the CI tests, builds and signs the installers, and attaches them and `latest.json` to a **draft** GitHub release. Overlapping release runs wait for each other.
-4. Review the draft and click **Publish**. Installed copies of TubeDeck then show "Update available" in the bottom-left corner within 6 hours, or right away on their next start. Nobody sees a draft.
+3. `.github/workflows/release.yml` first checks that this version has no release yet (published or draft) and has a CHANGELOG.md section, and stops within seconds if not. It then runs the CI tests, builds and signs the installers, and attaches them and `latest.json` to a **draft** GitHub release. Overlapping release runs wait for each other.
+4. Review the draft and click **Publish**. Installed copies of TubeDeck then show "Update available" in the bottom-left corner within 6 hours, or right away on their next start. Clicking it lists the CHANGELOG.md entries since the installed version. Nobody sees a draft.
 
 ### App updates and the signing key
 

@@ -39,6 +39,7 @@ jobs:
         run: |
           export VERSION=$(jq -r .version src-tauri/tauri.conf.json)
           bash .github/scripts/check-release.sh
+          bash .github/scripts/release-notes.sh --check "$VERSION"
 
   test:
     needs: preflight
@@ -68,6 +69,16 @@ jobs:
       - name: Install npm dependencies
         run: npm ci
 
+      - name: Release notes from CHANGELOG.md
+        id: notes
+        shell: bash
+        run: |
+          {
+            echo "body<<END_OF_RELEASE_NOTES"
+            bash .github/scripts/release-notes.sh "$(jq -r .version src-tauri/tauri.conf.json)"
+            echo "END_OF_RELEASE_NOTES"
+          } >> "$GITHUB_OUTPUT"
+
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -80,13 +91,10 @@ jobs:
           # on this commit if it doesn't exist yet.
           tagName: v__VERSION__
           releaseName: TubeDeck v__VERSION__
-          releaseBody: |
-            See CHANGELOG.md for what's new.
-
-            **New install:** download the `_x64-setup.exe` file below and run it. It installs for your user only and needs no administrator rights.
-            The installer isn't code-signed, so Windows SmartScreen warns the first time: click **More info → Run anyway**.
-
-            **Already installed:** TubeDeck shows "Update available" in the bottom-left corner. Click it to update.
+          # This version's CHANGELOG.md section plus install instructions. (It's also copied
+          # into latest.json; the app itself lists the changelog entries since the installed
+          # version instead.)
+          releaseBody: ${{ steps.notes.outputs.body }}
           releaseDraft: true
           prerelease: false
           includeUpdaterJson: true

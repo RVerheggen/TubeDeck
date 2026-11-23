@@ -131,6 +131,16 @@ export async function pickFolder(defaultPath?: string): Promise<string | null> {
   return typeof result === "string" ? result : null;
 }
 
+/** Open an http(s) link in the default browser. */
+export async function openExternal(url: string): Promise<void> {
+  if (!inDesktop) {
+    window.open(url, "_blank", "noopener");
+    return;
+  }
+  const { openUrl } = await import("@tauri-apps/plugin-opener");
+  await openUrl(url);
+}
+
 export async function revealInExplorer(path: string): Promise<void> {
   if (!inDesktop) return;
   // Falls back to the folder when the file was moved, deleted or saved under a garbled name.

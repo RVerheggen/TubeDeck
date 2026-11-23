@@ -42,16 +42,22 @@ export async function afterUpdate(): Promise<string | null> {
 }
 
 export async function appVersion(): Promise<string> {
-  if (!inDesktop) return "0.1.0";
+  if (!inDesktop) return "0.1.2";
   const { getVersion } = await import("@tauri-apps/api/app");
   return getVersion();
+}
+
+/** CHANGELOG.md as published with release `version` (fetched by the backend). */
+export async function fetchChangelog(version: string): Promise<string> {
+  if (!inDesktop) return (await import("../../CHANGELOG.md?raw")).default;
+  return invoke<string>("app_changelog", { version });
 }
 
 /** Returns the available update, or null when TubeDeck is up to date. */
 export async function checkAppUpdate(): Promise<AppUpdateInfo | null> {
   if (!inDesktop) {
     // Browser preview: pretend an update exists so the UI can be designed.
-    return { version: "0.1.1", currentVersion: "0.1.0", notes: "Sample release notes\n- Faster playlist picker\n- Fixes", date: null };
+    return { version: "0.1.4", currentVersion: "0.1.2", notes: null, date: "2026-11-24T00:00:00Z" };
   }
   const { check } = await import("@tauri-apps/plugin-updater");
   const update = await check({ timeout: 30_000 });

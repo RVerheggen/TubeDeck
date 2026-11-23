@@ -179,6 +179,26 @@ async fn get(http: &reqwest::Client, url: &str) -> Result<reqwest::Response, Str
     Err(last)
 }
 
+/// TubeDeck's own repository (releases, update feed, changelog).
+pub const APP_REPO: &str = "RVerheggen/TubeDeck";
+
+/// CHANGELOG.md as tagged for TubeDeck release `v{version}`, for the update dialog.
+pub async fn app_changelog(version: &str) -> Result<String, String> {
+    if version.is_empty()
+        || !version
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-')
+    {
+        return Err(format!("Invalid version: {version}"));
+    }
+    let url = format!("https://raw.githubusercontent.com/{APP_REPO}/v{version}/CHANGELOG.md");
+    get(&client(true)?, &url)
+        .await?
+        .text()
+        .await
+        .map_err(|e| error_chain(&e))
+}
+
 /// Latest release tag of a GitHub repo, read from the `/releases/latest` redirect
 /// (no API token or rate limit). Returns e.g. "2026.10.26" or "v2.9.8".
 pub async fn latest_tag(repo: &str) -> Result<String, String> {

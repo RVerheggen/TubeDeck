@@ -1,5 +1,10 @@
-import { ArrowUpCircle, LoaderCircle, TriangleAlert, X } from "lucide-react";
+import { ArrowUpCircle, ExternalLink, LoaderCircle, TriangleAlert, X } from "lucide-react";
+import { useEffect, useState } from "react";
+import { errorMessage, openExternal } from "../lib/api";
+import { fetchChangelog } from "../lib/appUpdate";
+import { changelogUrl, changesSince, releaseUrl, type ChangelogSection } from "../lib/changelog";
 import { useAppStore } from "../store/useAppStore";
+import { Markdown } from "./Markdown";
 
 const RUNNING = ["starting", "downloading", "processing"];
 
@@ -24,7 +29,63 @@ export function UpdateNotice() {
   );
 }
 
-/** Release notes + install button. */
+/** "2026-11-24" in the user's date format, like the release date above it. */
+const localDate = (iso: string) => {
+  const d = new Date(`${iso}T00:00:00`);
+  return Number.isNaN(d.getTime()) ? iso : d.toLocaleDateString();
+};
+
+type Changes = { phase: "loading" } | { phase: "ready"; sections: ChangelogSection[] } | { phase: "error"; message: string };
+
+/** What changed between the installed version and the available one, from CHANGELOG.md. */
+function WhatsNew({ installed, available }: { installed: string; available: string }) {
+  const [changes, setChanges] = useState<Changes>({ phase: "loading" });
+
+  useEffect(() => {
+    let live = true;
+    setChanges({ phase: "loading" });
+    fetchChangelog(available)
+      .then((md) => live && setChanges({ phase: "ready", sections: changesSince(md, installed, available) }))
+      .catch((e) => live && setChanges({ phase: "error", message: errorMessage(e) }));
+    return () => {
+      live = false;
+    };
+  }, [installed, available]);
+
+  const link = (url: string, label: string) => (
+    <button className="link-button" onClick={() => void openExternal(url)}>
+      {label} <ExternalLink size={12} />
+    </button>
+  );
+
+  return (
+    <div className="whats-new">
+      {changes.phase === "loading" && (
+        <p className="muted">
+          <LoaderCircle size={14} className="spin" /> Loading what's new…
+        </p>
+      )}
+      {changes.phase === "ready" &&
+        changes.sections.map((s) => (
+          <section key={s.version}>
+            <h3>
+              {s.version}
+              {s.date && <small>{localDate(s.date)}</small>}
+            </h3>
+            <Markdown text={s.body} />
+          </section>
+        ))}
+      {(changes.phase === "error" || (changes.phase === "ready" && changes.sections.length === 0)) && (
+        <p className="muted" title={changes.phase === "error" ? changes.message : undefined}>
+          Couldn't load the list of changes. {link(releaseUrl(available), "See the release on GitHub")}
+        </p>
+      )}
+      <div className="whats-new-links">{link(changelogUrl(available), "Full changelog")}</div>
+    </div>
+  );
+}
+
+/** What's new + install button. */
 export function AppUpdateDialog() {
   const openState = useAppStore((s) => s.appUpdateDialog);
   const update = useAppStore((s) => s.appUpdate);
@@ -57,7 +118,7 @@ export function AppUpdateDialog() {
           )}
         </header>
         <div className="update-body">
-          {update.notes ? <pre className="release-notes">{update.notes}</pre> : <p className="muted">No release notes.</p>}
+          <WhatsNew installed={update.currentVersion} available={update.version} />
           {running > 0 && !busy && (
             <p className="notice warn">
               <TriangleAlert size={15} /> {running} download{running > 1 ? "s are" : " is"} running. {running > 1 ? "They're" : "It's"} saved and

@@ -363,6 +363,12 @@ fn update_marker(state: &AppState) -> PathBuf {
     data.join("updated-from.txt")
 }
 
+/// The changelog published with TubeDeck `version`, to list what an update changes.
+#[tauri::command]
+pub async fn app_changelog(version: String) -> CmdResult<String> {
+    installer::app_changelog(&version).await
+}
+
 /// After an update: "TubeDeck was updated from X to Y" (once), else None.
 #[tauri::command]
 pub fn take_update_notice(app: AppHandle, state: State<'_, AppState>) -> Option<String> {
