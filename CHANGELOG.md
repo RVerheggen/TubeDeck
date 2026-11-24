@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+### Releases
+- Publishing a release no longer starts a second, failing release run. Releases are started only with Actions → Release → Run workflow.
+
 ## 0.1.5 (2026-11-24)
 
 ### Changed

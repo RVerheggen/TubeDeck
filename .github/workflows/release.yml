@@ -1,16 +1,15 @@
 name: Release
 
-# Two ways to start a release of the version in src-tauri/tauri.conf.json:
-#   • Recommended: Actions → Release → Run workflow (on main). The tag is created for you,
-#     and the Rust build cache is saved under main, so the next release reuses it.
-#   • Or push a tag like v0.1.2. This works too, but GitHub scopes caches per tag, so every
-#     tag-started build compiles from scratch (~8–10 min).
-# Either way: the CI tests run (Linux), the Windows installers are built and signed for the
-# updater, and everything (including latest.json) goes into a DRAFT GitHub release.
-# Installed copies only see the update once you publish the draft.
+# Start a release of the version in src-tauri/tauri.conf.json with
+# Actions → Release → Run workflow (on main). The CI tests run (Linux), the Windows
+# installers are built and signed for the updater, and everything (including latest.json)
+# goes into a DRAFT GitHub release. Installed copies only see the update once you publish
+# the draft; publishing creates the v<version> tag.
+#
+# There is deliberately no "push: tags" trigger: publishing the draft creates the tag,
+# which would start a second, pointless run. Builds from main also reuse the Rust cache
+# (GitHub keeps caches per ref, so tag-started builds always compiled from scratch).
 on:
-  push:
-    tags: ["v*"]
   workflow_dispatch:
 
 permissions:
@@ -35,9 +34,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
-          EVENT: ${{ github.event_name }}
           REF: ${{ github.ref }}
-          REF_NAME: ${{ github.ref_name }}
         run: |
           export VERSION=$(jq -r .version src-tauri/tauri.conf.json)
           bash .github/scripts/check-release.sh

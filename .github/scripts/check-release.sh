@@ -5,22 +5,15 @@
 # misses unpublished drafts, and a second run would create a duplicate draft. This asks
 # the Releases API instead, which lists drafts too (needs a token with contents access).
 #
-# Env: VERSION (from tauri.conf.json), EVENT (push | workflow_dispatch), REF, REF_NAME,
-#      GH_REPO (owner/name), GH_TOKEN.
+# Env: VERSION (from tauri.conf.json), REF (the ref the run started on), GH_REPO (owner/name),
+#      GH_TOKEN.
 set -euo pipefail
 
 tag="v${VERSION:?}"
 
-if [[ "${EVENT:?}" == "push" ]]; then
-  if [[ "${REF_NAME:?}" != "$tag" ]]; then
-    echo "::error::Tag ${REF_NAME} does not match the version in tauri.conf.json (${VERSION})."
-    exit 1
-  fi
-else
-  if [[ "${REF:?}" != "refs/heads/main" ]]; then
-    echo "::error::Start releases from main (this run is on ${REF})."
-    exit 1
-  fi
+if [[ "${REF:?}" != "refs/heads/main" ]]; then
+  echo "::error::Start releases from main (this run is on ${REF})."
+  exit 1
 fi
 
 existing=$(gh api "repos/${GH_REPO:?}/releases" --paginate \
